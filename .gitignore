@@ -1,0 +1,14 @@
+# Dépendances et buillds
+node_modules/
+.next/
+out/
+dist/
+build/
+.env
+.env.local
+.env.*.local
+.vscode/
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
