@@ -1,0 +1,201 @@
+/**
+ * API Client for Annoy Backend
+ * Type-safe client for all backend endpoints
+ */
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_V1 = `${API_BASE_URL}/api/v1`;
+
+// Types
+export interface Dataset {
+  id: string;
+  filename: string;
+  file_size: number;
+  row_count: number;
+  column_count: number;
+  upload_date: string;
+  is_anonymized: boolean;
+  risk_score: number | null;
+  is_loi25_compliant: boolean;
+  columns?: ColumnInfo[];
+}
+
+export interface ColumnInfo {
+  name: string;
+  position: number;
+  data_type: string;
+  sensitivity_type: string | null;
+  category: string | null;
+  confidence: number | null;
+  null_count: number;
+  unique_count: number;
+  sample_values: any[] | null;
+}
+
+export interface DatasetPreview {
+  dataset_id: string;
+  columns: string[];
+  sample_rows: Record<string, any>[];
+  total_rows: number;
+}
+
+export interface ColumnClassification {
+  column_name: string;
+  sensitivity_type: 'direct_identifier' | 'quasi_identifier' | 'sensitive' | 'non_sensitive';
+  category: 'personal' | 'financial' | 'health' | 'insurance' | 'other';
+  confidence: number;
+  justification: string;
+}
+
+export interface DetectionReport {
+  dataset_id: string;
+  columns: Record<string, ColumnClassification>;
+  overall_risk_score: number;
+  summary: {
+    direct_identifier: number;
+    quasi_identifier: number;
+    sensitive: number;
+    non_sensitive: number;
+  };
+}
+
+export interface AnonymizationConfig {
+  column_name: string;
+  technique: 'masking' | 'generalization' | 'suppression' | 'pseudonymization';
+  params: Record<string, any>;
+}
+
+export interface TransformationDetail {
+  column_name: string;
+  technique: string;
+  params: Record<string, any>;
+  values_affected: number;
+  sample_transformations: Array<{
+    original: string;
+    anonymized: string;
+  }> | null;
+}
+
+export interface AnonymizationResponse {
+  job_id: string;
+  anonymized_dataset_id: string;
+  transformations: TransformationDetail[];
+  processing_time_seconds: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+}
+
+export interface RiskScore {
+  score: number;
+  level: 'faible' | 'moyen' | 'élevé';
+  justification: string;
+  affected_columns: string[];
+}
+
+export interface RiskAssessment {
+  dataset_id: string;
+  assessed_at: string;
+  individualization: RiskScore;
+  correlation: RiskScore;
+  inference: RiskScore;
+  overall_score: number;
+  overall_level: 'faible' | 'moyen' | 'élevé';
+  is_loi25_compliant: boolean;
+  recommendations: string[];
+  details: any | null;
+}
+
+// API Client Class
+class AnnoyAPIClient {
+  private baseUrl: string;
+
+  constructor(baseUrl: string = API_V1) {
+    this.baseUrl = baseUrl;
+  }
+
+  // Helper method for handling responses
+  private async handleResponse<T>(response: Response): Promise<T> {
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+      throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // Datasets endpoints
+  async uploadDataset(file: File): Promise<Dataset> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${this.baseUrl}/datasets/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    return this.handleResponse<Dataset>(response);
+  }
+
+  async getDataset(datasetId: string): Promise<Dataset> {
+    const response = await fetch(`${this.baseUrl}/datasets/${datasetId}`);
+    return this.handleResponse<Dataset>(response);
+  }
+
+  async getDatasetPreview(datasetId: string, nRows: number = 10): Promise<DatasetPreview> {
+    const response = await fetch(
+      `${this.baseUrl}/datasets/${datasetId}/preview?n_rows=${nRows}`
+    );
+    return this.handleResponse<DatasetPreview>(response);
+  }
+
+  async deleteDataset(datasetId: string): Promise<void> {
+    await fetch(`${this.baseUrl}/datasets/${datasetId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Detection endpoint
+  async detectSensitiveData(datasetId: string): Promise<DetectionReport> {
+    const response = await fetch(`${this.baseUrl}/datasets/${datasetId}/detect`, {
+      method: 'POST',
+    });
+    return this.handleResponse<DetectionReport>(response);
+  }
+
+  // Anonymization endpoints
+  async anonymizeDataset(
+    datasetId: string,
+    config: AnonymizationConfig[]
+  ): Promise<AnonymizationResponse> {
+    const response = await fetch(`${this.baseUrl}/datasets/${datasetId}/anonymize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(config),
+    });
+    return this.handleResponse<AnonymizationResponse>(response);
+  }
+
+  getDownloadUrl(datasetId: string): string {
+    return `${this.baseUrl}/datasets/${datasetId}/download`;
+  }
+
+  async downloadDataset(datasetId: string): Promise<Blob> {
+    const response = await fetch(this.getDownloadUrl(datasetId));
+    if (!response.ok) {
+      throw new Error(`Failed to download: ${response.statusText}`);
+    }
+    return response.blob();
+  }
+
+  // Risk assessment endpoint
+  async assessRisk(datasetId: string): Promise<RiskAssessment> {
+    const response = await fetch(`${this.baseUrl}/datasets/${datasetId}/risk-assessment`);
+    return this.handleResponse<RiskAssessment>(response);
+  }
+}
+
+// Export singleton instance
+export const api = new AnnoyAPIClient();
+
+// Export the class for testing/custom instances
+export default AnnoyAPIClient;
