@@ -1,0 +1,42 @@
+[
+  {
+    "column_name": "email",
+    "technique": "masking",
+    "params": {"visible_chars": 2, "mask_char": "*"}
+  },
+  {
+    "column_name": "telephone",
+    "technique": "masking",
+    "params": {"visible_chars": 2, "mask_char": "*"}
+  },
+  {
+    "column_name": "nas",
+    "technique": "suppression",
+    "params": {}
+  },
+  {
+    "column_name": "nom",
+    "technique": "pseudonymization",
+    "params": {"prefix": "PERSON_", "seed": 42}
+  },
+  {
+    "column_name": "prenom",
+    "technique": "pseudonymization",
+    "params": {"prefix": "FIRSTNAME_", "seed": 42}
+  },
+  {
+    "column_name": "revenu_annuel",
+    "technique": "generalization",
+    "params": {"method": "range", "range_size": 25000}
+  },
+  {
+    "column_name": "date_naissance",
+    "technique": "generalization",
+    "params": {"method": "year_only"}
+  },
+  {
+    "column_name": "code_postal",
+    "technique": "generalization",
+    "params": {"method": "prefix", "prefix_length": 3}
+  }
+]
