@@ -192,6 +192,15 @@ class AnnoyAPIClient {
     const response = await fetch(`${this.baseUrl}/datasets/${datasetId}/risk-assessment`);
     return this.handleResponse<RiskAssessment>(response);
   }
+
+  // Generate and download PDF compliance report
+  async downloadComplianceReport(datasetId: string): Promise<Blob> {
+    const response = await fetch(`${this.baseUrl}/datasets/${datasetId}/report`);
+    if (!response.ok) {
+      throw new Error(`Failed to generate report: ${response.statusText}`);
+    }
+    return response.blob();
+  }
 }
 
 // Export singleton instance
