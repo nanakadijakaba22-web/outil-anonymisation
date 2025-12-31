@@ -4,6 +4,7 @@ API endpoints for dataset management.
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -11,6 +12,7 @@ from app.models.schemas import DatasetResponse, DatasetPreview, DetectionReport,
 from app.services.data_ingestion import DataIngestionService
 from app.services.detector import SensitiveDataDetector
 from app.services.risk_evaluator import RiskEvaluator
+from app.services.report_generator import PDFReportGenerator
 
 router = APIRouter()
 
@@ -151,3 +153,95 @@ def delete_dataset(
     service = DataIngestionService(db)
     service.delete_dataset(dataset_id)
     return None
+
+
+@router.get("/{dataset_id}/report")
+async def generate_compliance_report(
+    dataset_id: UUID,
+    db: Session = Depends(get_db)
+) -> StreamingResponse:
+    """
+    Generate a comprehensive PDF compliance report for Quebec Law 25.
+
+    - **dataset_id**: UUID of the dataset (original or anonymized)
+
+    **IMPORTANT**: Run detection and risk assessment first to populate the report with:
+    - Detection results (`POST /{dataset_id}/detect`)
+    - Risk assessment (`GET /{dataset_id}/risk-assessment`)
+
+    Returns a professional PDF report including:
+    - Executive summary with compliance status
+    - Risk assessment details (individualization, correlation, inference)
+    - Sensitive data detection results
+    - Anonymization transformations (if applicable)
+    - Actionable recommendations
+
+    The report is suitable for compliance audits and stakeholder communication.
+    """
+    # Get dataset
+    service = DataIngestionService(db)
+    dataset = service.get_dataset(dataset_id)
+
+    # Get risk assessment (required)
+    evaluator = RiskEvaluator(db)
+    risk_assessment = await evaluator.evaluate_dataset(dataset_id)
+
+    # Try to get detection report (optional, might not exist for anonymized datasets)
+    detection_report = None
+    try:
+        detector = SensitiveDataDetector(db)
+        detection_report = await detector.analyze_dataset(dataset_id)
+    except Exception:
+        # Detection not available or failed - continue without it
+        pass
+
+    # Get anonymization details if this is an anonymized dataset
+    anonymization_response = None
+    if dataset.is_anonymized and dataset.anonymization_jobs:
+        # Get the latest anonymization job
+        latest_job = max(dataset.anonymization_jobs, key=lambda j: j.created_at)
+        from app.models.schemas import AnonymizationResponse, TransformationResult, SampleTransformation
+
+        # Build anonymization response from job data
+        transformations = []
+        for log in latest_job.transformation_logs:
+            transformations.append(
+                TransformationResult(
+                    column_name=log.column_name,
+                    technique=log.technique,
+                    params=log.params or {},
+                    values_affected=log.values_affected,
+                    sample_transformations=[
+                        SampleTransformation(
+                            original=sample.get("original", ""),
+                            anonymized=sample.get("anonymized", "")
+                        )
+                        for sample in (log.sample_transformations or [])[:5]
+                    ]
+                )
+            )
+
+        anonymization_response = AnonymizationResponse(
+            job_id=latest_job.id,
+            anonymized_dataset_id=dataset.id,
+            transformations=transformations
+        )
+
+    # Generate PDF
+    generator = PDFReportGenerator()
+    pdf_buffer = generator.generate_compliance_report(
+        dataset=DatasetResponse.model_validate(dataset),
+        detection_report=detection_report,
+        risk_assessment=risk_assessment,
+        anonymization_response=anonymization_response
+    )
+
+    # Return PDF as streaming response
+    filename = f"rapport_loi25_{dataset.filename.replace('.csv', '')}.pdf"
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
