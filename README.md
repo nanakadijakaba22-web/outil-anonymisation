@@ -228,7 +228,7 @@ curl "http://localhost:8000/api/v1/datasets/{anonymized_id}/download" \
 
 ## 📊 Statut du Projet
 
-**Progression globale: 62.5% (15/24 tâches)**
+**Progression globale: 100% (24/24 tâches) - MVP COMPLET ✅**
 
 ### ✅ Complété (Backend)
 
@@ -236,12 +236,13 @@ curl "http://localhost:8000/api/v1/datasets/{anonymized_id}/download" \
 - [x] **Phase 2:** Détection de données sensibles
 - [x] **Phase 3:** 4 techniques d'anonymisation
 - [x] **Phase 4:** Évaluation des risques Loi 25
+- [x] **Phase 5:** Frontend Next.js (100%)
+- [x] **Phase 6:** Rapports PDF (100%)
+- [x] **Phase 7:** Tests & Déploiement (100%)
 
-### 🚧 En cours
+### ✅ MVP Complet
 
-- [ ] **Phase 5:** Frontend Next.js (0%)
-- [ ] **Phase 6:** Rapports PDF (0%)
-- [ ] **Phase 7:** Tests & Déploiement (0%)
+Toutes les phases sont complétées! L'application est prête pour la production.
 
 ---
 
@@ -254,6 +255,180 @@ Implémente les articles clés de la Loi 25:
 - ✅ **Article 63.1**: Documentation des mesures
 
 **Critères d'évaluation conformes aux meilleures pratiques**
+
+---
+
+## 🧪 Tests
+
+### Tests E2E (End-to-End)
+
+Le projet inclut une suite de tests E2E complète qui valide le workflow entier:
+
+```bash
+# Démarrer les services
+docker-compose up -d
+
+# Exécuter les tests E2E
+docker-compose exec backend poetry run pytest tests/test_e2e_workflow.py -v -s
+```
+
+**Tests couverts:**
+- ✅ Upload de CSV
+- ✅ Détection de données sensibles
+- ✅ Évaluation des risques (avant anonymisation)
+- ✅ Anonymisation avec configuration
+- ✅ Évaluation des risques (après anonymisation)
+- ✅ Téléchargement du CSV anonymisé
+- ✅ Génération du rapport PDF
+- ✅ Gestion d'erreurs
+- ✅ Suppression de datasets
+
+**Résultat attendu:**
+```
+✅ Complete E2E workflow successful!
+✓ Original dataset: Risk 69.9% (NON-COMPLIANT)
+✓ Anonymized dataset: Risk 0.0% (COMPLIANT)
+✓ Risk reduction: 69.9%
+```
+
+---
+
+## 🚀 Déploiement Production
+
+### Configuration rapide
+
+```bash
+# 1. Copier et configurer les variables d'environnement
+cp .env.production.example .env.production
+# Éditer .env.production avec vos valeurs
+
+# 2. Lancer en production
+docker-compose -f docker-compose.prod.yml up -d
+
+# 3. Vérifier la santé des services
+curl http://localhost/health
+```
+
+### Variables d'environnement critiques
+
+**À MODIFIER OBLIGATOIREMENT:**
+```bash
+POSTGRES_PASSWORD=VOTRE_MOT_DE_PASSE_FORT
+DEFAULT_PSEUDONYM_SEED=NOMBRE_ALEATOIRE_SECURISE
+SESSION_SECRET=$(openssl rand -hex 32)
+BACKEND_CORS_ORIGINS=https://votre-domaine.com
+NEXT_PUBLIC_API_URL=https://votre-domaine.com
+```
+
+### Architecture de production
+
+```
+┌─────────────┐
+│   Nginx     │ ← Port 80/443 (reverse proxy)
+│  (Alpine)   │
+└──────┬──────┘
+       │
+   ┌───┴────────┐
+   │            │
+┌──▼──────┐  ┌─▼────────┐
+│ Next.js │  │ FastAPI  │
+│ (Node)  │  │ (Python) │
+└─────────┘  └────┬─────┘
+                  │
+             ┌────▼─────┐
+             │PostgreSQL│
+             │   (15)   │
+             └──────────┘
+```
+
+### Fonctionnalités de production
+
+**Sécurité:**
+- ✅ Rate limiting (10 req/s général, 5 req/min uploads)
+- ✅ CORS configuré
+- ✅ Headers de sécurité (X-Frame-Options, CSP, etc.)
+- ✅ Utilisateurs non-root dans containers
+- ✅ Health checks automatiques
+
+**Performance:**
+- ✅ 4 workers uvicorn
+- ✅ Compression gzip
+- ✅ Mise en cache nginx
+- ✅ Timeouts optimisés (uploads: 10min)
+
+**Monitoring:**
+- ✅ Health check endpoint: `/health`
+- ✅ Logs centralisés
+- ✅ Support Sentry (optionnel)
+
+### SSL/HTTPS (Recommandé)
+
+1. Obtenir un certificat (Let's Encrypt recommandé):
+```bash
+# Avec Certbot
+sudo certbot certonly --standalone -d votre-domaine.com
+```
+
+2. Configurer nginx (voir `nginx/nginx.conf`):
+```nginx
+# Décommenter la section SSL
+listen 443 ssl http2;
+ssl_certificate /etc/nginx/ssl/cert.pem;
+ssl_certificate_key /etc/nginx/ssl/key.pem;
+```
+
+3. Monter les certificats:
+```bash
+# Dans docker-compose.prod.yml
+volumes:
+  - /etc/letsencrypt/live/votre-domaine.com:/etc/nginx/ssl:ro
+```
+
+### Sauvegarde et restauration
+
+**Base de données:**
+```bash
+# Backup
+docker-compose exec db pg_dump -U annoy_user annoy_production > backup.sql
+
+# Restauration
+docker-compose exec -T db psql -U annoy_user annoy_production < backup.sql
+```
+
+**Uploads:**
+```bash
+# Backup volumes
+docker run --rm \
+  -v annoy_uploads_prod:/data \
+  -v $(pwd):/backup \
+  alpine tar czf /backup/uploads-backup.tar.gz /data
+```
+
+### Mises à jour
+
+```bash
+# 1. Pull dernière version
+git pull
+
+# 2. Rebuild images
+docker-compose -f docker-compose.prod.yml build
+
+# 3. Restart services (zero downtime avec replicas)
+docker-compose -f docker-compose.prod.yml up -d --no-deps --build backend
+```
+
+### Monitoring et logs
+
+```bash
+# Logs en temps réel
+docker-compose -f docker-compose.prod.yml logs -f
+
+# Logs backend uniquement
+docker-compose -f docker-compose.prod.yml logs -f backend
+
+# Métriques de performance
+docker stats
+```
 
 ---
 
@@ -288,8 +463,8 @@ docker-compose exec backend bash
 docker-compose exec backend poetry run alembic revision --autogenerate -m "description"
 docker-compose exec backend poetry run alembic upgrade head
 
-# Tests (à venir)
-docker-compose exec backend poetry run pytest
+# Tests E2E
+docker-compose exec backend poetry run pytest tests/test_e2e_workflow.py -v
 ```
 
 ---
@@ -311,12 +486,13 @@ MAX_UPLOAD_SIZE=104857600  # 100MB
 
 ## 🗺️ Roadmap
 
-**Prochaines étapes:**
-- Frontend Next.js complet
-- Génération rapports PDF
-- Tests automatisés
+**✅ MVP Complet (v0.1.0):**
+- ✅ Frontend Next.js avec 4 pages interactives
+- ✅ Génération de rapports PDF professionnels
+- ✅ Tests E2E automatisés
+- ✅ Configuration de production avec Docker
 
-**Futur:**
+**Prochaines améliorations (v0.2.0):**
 - Support Excel/XLSX
 - K-anonymity avancé
 - Differential privacy
