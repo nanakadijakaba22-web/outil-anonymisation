@@ -83,6 +83,53 @@ class ColumnClassification(BaseModel):
     justification: str
 
 
+class ColumnSensitivityUpdate(BaseModel):
+    """Schema for updating column sensitivity classification."""
+
+    sensitivity_type: DataType
+    category: Optional[Category] = None
+    justification: Optional[str] = Field(
+        None,
+        description="Optional reason for manual override"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "sensitivity_type": "direct_identifier",
+                "category": "personal",
+                "justification": "Contains unique client identifiers"
+            }
+        }
+    )
+
+
+class BulkSensitivityUpdate(BaseModel):
+    """Schema for bulk updating multiple columns' sensitivity."""
+
+    updates: dict[str, ColumnSensitivityUpdate] = Field(
+        ...,
+        description="Map of column_name to sensitivity updates"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "updates": {
+                    "client_id": {
+                        "sensitivity_type": "direct_identifier",
+                        "category": "personal"
+                    },
+                    "age": {
+                        "sensitivity_type": "quasi_identifier",
+                        "category": "personal"
+                    }
+                }
+            }
+        }
+    )
+
+
 # Dataset Schemas
 class DatasetCreate(BaseModel):
     """Schema for dataset creation (internal use)."""

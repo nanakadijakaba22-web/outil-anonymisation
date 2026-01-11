@@ -8,7 +8,16 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.schemas import DatasetResponse, DatasetPreview, DetectionReport, RiskAssessmentResponse
+from app.models.database import DatasetColumn, Dataset
+from app.models.schemas import (
+    DatasetResponse,
+    DatasetPreview,
+    DetectionReport,
+    RiskAssessmentResponse,
+    ColumnSensitivityUpdate,
+    BulkSensitivityUpdate,
+    ColumnInfo
+)
 from app.services.data_ingestion import DataIngestionService
 from app.services.detector import SensitiveDataDetector
 from app.services.risk_evaluator import RiskEvaluator
@@ -178,6 +187,136 @@ async def detect_sensitive_data(
     """
     detector = SensitiveDataDetector(db)
     return await detector.analyze_dataset(dataset_id)
+
+
+@router.put("/{dataset_id}/columns/{column_name}/sensitivity", response_model=ColumnInfo)
+def update_column_sensitivity(
+    dataset_id: UUID,
+    column_name: str,
+    update: ColumnSensitivityUpdate,
+    db: Session = Depends(get_db)
+) -> ColumnInfo:
+    """
+    Update the sensitivity classification of a specific column.
+
+    - **dataset_id**: UUID of the dataset
+    - **column_name**: Name of the column to update
+    - **update**: New sensitivity classification
+
+    This endpoint allows users to manually override the automatic detection
+    results for a column. This is critical for Law 25 compliance as users
+    have domain knowledge about their data.
+
+    **Use Case:**
+    After running detection, users may:
+    - Correct misclassifications (e.g., "client_id" → direct_identifier)
+    - Add business context (e.g., "age" → quasi_identifier in medical context)
+    - Downgrade sensitivity if data is already sanitized
+
+    Returns updated column information with confidence set to 100%
+    (indicating manual validation).
+    """
+    # Find the column
+    column = db.query(DatasetColumn).filter(
+        DatasetColumn.dataset_id == dataset_id,
+        DatasetColumn.name == column_name
+    ).first()
+
+    if not column:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Column '{column_name}' not found in dataset {dataset_id}"
+        )
+
+    # Update sensitivity
+    column.sensitivity_type = update.sensitivity_type.value
+    if update.category:
+        column.category = update.category.value
+    column.confidence = 100.0  # Manual override = 100% confidence
+
+    # Commit changes
+    db.commit()
+    db.refresh(column)
+
+    return ColumnInfo.model_validate(column)
+
+
+@router.put("/{dataset_id}/columns/sensitivity/bulk", response_model=list[ColumnInfo])
+def update_columns_sensitivity_bulk(
+    dataset_id: UUID,
+    bulk_update: BulkSensitivityUpdate,
+    db: Session = Depends(get_db)
+) -> list[ColumnInfo]:
+    """
+    Update the sensitivity classification of multiple columns at once.
+
+    - **dataset_id**: UUID of the dataset
+    - **bulk_update**: Map of column names to sensitivity updates
+
+    This endpoint is more efficient than calling the single-column endpoint
+    multiple times, as it performs all updates in a single database transaction.
+
+    **Use Case:**
+    User reviews all detection results and corrects multiple columns before
+    proceeding to anonymization configuration.
+
+    **Example Request Body:**
+    ```json
+    {
+      "updates": {
+        "client_id": {
+          "sensitivity_type": "direct_identifier",
+          "category": "personal"
+        },
+        "age": {
+          "sensitivity_type": "quasi_identifier",
+          "category": "personal"
+        },
+        "ville": {
+          "sensitivity_type": "quasi_identifier"
+        }
+      }
+    }
+    ```
+
+    Returns list of all updated columns with their new classifications.
+    """
+    # Verify dataset exists
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+
+    updated_columns = []
+
+    for column_name, update in bulk_update.updates.items():
+        # Find the column
+        column = db.query(DatasetColumn).filter(
+            DatasetColumn.dataset_id == dataset_id,
+            DatasetColumn.name == column_name
+        ).first()
+
+        if not column:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Column '{column_name}' not found in dataset {dataset_id}"
+            )
+
+        # Update sensitivity
+        column.sensitivity_type = update.sensitivity_type.value
+        if update.category:
+            column.category = update.category.value
+        column.confidence = 100.0  # Manual override = 100% confidence
+
+        updated_columns.append(column)
+
+    # Commit all changes in one transaction
+    db.commit()
+
+    # Refresh and return all updated columns
+    for column in updated_columns:
+        db.refresh(column)
+
+    return [ColumnInfo.model_validate(col) for col in updated_columns]
 
 
 @router.get("/{dataset_id}/risk-assessment", response_model=RiskAssessmentResponse)
