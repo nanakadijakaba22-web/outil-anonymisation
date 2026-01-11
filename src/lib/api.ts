@@ -59,6 +59,16 @@ export interface DetectionReport {
   };
 }
 
+export interface ColumnSensitivityUpdate {
+  sensitivity_type: 'direct_identifier' | 'quasi_identifier' | 'sensitive' | 'non_sensitive';
+  category?: 'personal' | 'financial' | 'health' | 'insurance' | 'other';
+  justification?: string;
+}
+
+export interface BulkSensitivityUpdate {
+  updates: Record<string, ColumnSensitivityUpdate>;
+}
+
 export interface AnonymizationConfig {
   column_name: string;
   technique: 'masking' | 'generalization' | 'suppression' | 'pseudonymization';
@@ -158,6 +168,42 @@ class AnnoyAPIClient {
       method: 'POST',
     });
     return this.handleResponse<DetectionReport>(response);
+  }
+
+  // Column sensitivity update endpoints
+  async updateColumnSensitivity(
+    datasetId: string,
+    columnName: string,
+    update: ColumnSensitivityUpdate
+  ): Promise<ColumnInfo> {
+    const response = await fetch(
+      `${this.baseUrl}/datasets/${datasetId}/columns/${encodeURIComponent(columnName)}/sensitivity`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(update),
+      }
+    );
+    return this.handleResponse<ColumnInfo>(response);
+  }
+
+  async updateColumnsSensitivityBulk(
+    datasetId: string,
+    bulkUpdate: BulkSensitivityUpdate
+  ): Promise<ColumnInfo[]> {
+    const response = await fetch(
+      `${this.baseUrl}/datasets/${datasetId}/columns/sensitivity/bulk`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(bulkUpdate),
+      }
+    );
+    return this.handleResponse<ColumnInfo[]>(response);
   }
 
   // Anonymization endpoints

@@ -377,9 +377,9 @@ class PDFReportGenerator:
         # Summary
         summary = detection_report.summary
         summary_text = f"""
-        L'analyse a identifié <b>{summary['direct_identifier']}</b> identifiants directs,
-        <b>{summary['quasi_identifier']}</b> quasi-identifiants, <b>{summary['sensitive']}</b>
-        données sensibles et <b>{summary['non_sensitive']}</b> colonnes non-sensibles.
+        L'analyse a identifié <b>{summary.get('direct_identifier', 0)}</b> identifiants directs,
+        <b>{summary.get('quasi_identifier', 0)}</b> quasi-identifiants, <b>{summary.get('sensitive', 0)}</b>
+        données sensibles et <b>{summary.get('non_sensitive', 0)}</b> colonnes non-sensibles.
         """
         elements.append(Paragraph(summary_text, self.styles["BodyText"]))
         elements.append(Spacer(1, 0.2 * inch))

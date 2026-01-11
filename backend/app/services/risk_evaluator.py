@@ -138,7 +138,7 @@ class RiskEvaluator:
         records_at_risk = small_groups.sum()
         percentage_at_risk = (records_at_risk / len(df)) * 100
 
-        return (int(k_min), percentage_at_risk)
+        return (int(k_min), float(percentage_at_risk))
 
     async def evaluate_dataset(self, dataset_id: UUID) -> RiskAssessmentResponse:
         """
@@ -201,6 +201,8 @@ class RiskEvaluator:
 
         # Generate compact visualization summary (Phase 3)
         visualization_summary = self._generate_compact_visualization_summary(dataset_id, df)
+        # Convert all numpy types to Python natives for JSON serialization
+        visualization_summary = self._convert_numpy_types(visualization_summary)
 
         # Save assessment
         assessment = RiskAssessmentModel(
@@ -475,6 +477,30 @@ class RiskEvaluator:
             justification=justification,
             affected_columns=affected_columns,
         )
+
+    @staticmethod
+    def _convert_numpy_types(obj):
+        """
+        Recursively convert numpy types to Python native types for JSON serialization.
+
+        Args:
+            obj: Object to convert (can be dict, list, numpy type, or primitive)
+
+        Returns:
+            Object with all numpy types converted to Python natives
+        """
+        if isinstance(obj, dict):
+            return {key: RiskEvaluator._convert_numpy_types(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [RiskEvaluator._convert_numpy_types(item) for item in obj]
+        elif isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return obj
 
     def _score_to_level(self, score: float) -> RiskLevel:
         """Convert numeric score to risk level."""
