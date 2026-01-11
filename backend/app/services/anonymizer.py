@@ -8,8 +8,10 @@ Techniques:
 4. Pseudonymization - Consistent fake ID generation (names)
 5. Differential Privacy - Mathematical noise addition for formal guarantees (OPTIONAL)
 """
+import hmac
 import hashlib
 import logging
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
@@ -235,13 +237,15 @@ class Anonymizer:
         params: Dict[str, Any]
     ) -> pd.DataFrame:
         """
-        Masking: Partial character replacement.
+        Masking: Partial character replacement with type awareness.
 
         Params:
-            visible_chars: Number of characters to keep visible at start/end (default: 2)
-            mask_char: Character to use for masking (default: '*')
+            visible_start: Chars to keep at start (default: 2)
+            visible_end: Chars to keep at end (default: 2)
+            mask_char: Character to use (default: '*')
         """
-        visible_chars = params.get("visible_chars", 2)
+        v_start = params.get("visible_start", params.get("visible_chars", 2))
+        v_end = params.get("visible_end", 2)
         mask_char = params.get("mask_char", "*")
 
         def mask_value(val):
@@ -250,32 +254,26 @@ class Anonymizer:
 
             val_str = str(val)
 
-            # Email masking: keep local/domain prefixes
+            # 1. Email masking: [token]@domain.tld or keep first/last of local
             if "@" in val_str:
                 local, domain = val_str.split("@", 1)
-                if "." in domain:
-                    domain_name, tld = domain.rsplit(".", 1)
-                    masked_local = self._mask_string(local, visible_chars, mask_char)
-                    masked_domain = self._mask_string(domain_name, visible_chars, mask_char)
-                    return f"{masked_local}@{masked_domain}.{tld}"
+                # Keep first letter of local, mask rest
+                masked_local = local[0] + (mask_char * 5) if len(local) > 1 else mask_char * 5
+                return f"{masked_local}@{domain}"
 
-            # Phone masking: keep area code
-            phone_match = re.match(r"^(\d{3})[-.\s]?(\d{3})[-.\s]?(\d{4})$", val_str)
-            if phone_match:
-                area, prefix, line = phone_match.groups()
-                return f"{area}-{mask_char * 3}-{mask_char * 4}"
+            # 2. Phone masking: keep area code only
+            phone_digits = re.sub(r"\D", "", val_str)
+            if len(phone_digits) >= 10:
+                return f"{phone_digits[:3]}-{mask_char*3}-{mask_char*4}"
 
-            # General string masking
-            return self._mask_string(val_str, visible_chars, mask_char)
+            # 3. General string masking: Keep start AND end
+            if len(val_str) <= (v_start + v_end):
+                return mask_char * len(val_str)
+            
+            return val_str[:v_start] + mask_char * 5 + val_str[-v_end:]
 
         df[column] = df[column].apply(mask_value)
         return df
-
-    def _mask_string(self, s: str, visible: int, mask_char: str) -> str:
-        """Helper to mask a string keeping visible characters at start."""
-        if len(s) <= visible * 2:
-            return mask_char * len(s)
-        return s[:visible] + mask_char * (len(s) - visible)
 
     def _generalize_column(
         self,
@@ -389,14 +387,18 @@ class Anonymizer:
         params: Dict[str, Any]
     ) -> pd.DataFrame:
         """
-        Pseudonymization: Consistent replacement with fake IDs.
+        Pseudonymization: Consistent replacement with HMAC-SHA256.
+        IMPORTANT: This is NOT anonymization, but pseudonymization (reversible if key is leaked).
 
         Params:
-            prefix: Prefix for pseudonyms (default: "PERSON_")
-            seed: Random seed for consistency (default: 42)
+            prefix: Prefix for pseudonyms (default: "ID_")
+            seed: Salt/Seed (optional, additional to secret key)
         """
-        prefix = params.get("prefix", "PERSON_")
-        seed = params.get("seed", 42)
+        prefix = params.get("prefix", "ID_")
+        seed = str(params.get("seed", "law25_default_seed"))
+        
+        # Get server secret key for HMAC
+        secret_key = os.getenv("ANONYMIZER_SECRET_KEY", "loi25_quebec_super_secret_key_2024").encode('utf-8')
 
         def pseudonymize_value(val):
             if pd.isna(val):
@@ -404,16 +406,19 @@ class Anonymizer:
 
             val_str = str(val)
 
-            # Check cache
+            # Check cache to avoid re-computing HMAC for same values in same job
             if val_str in self._pseudonym_cache:
                 return self._pseudonym_cache[val_str]
 
-            # Generate deterministic pseudonym using hash
-            hash_input = f"{val_str}_{seed}".encode('utf-8')
-            hash_hex = hashlib.sha256(hash_input).hexdigest()[:6].upper()
-            pseudonym = f"{prefix}{hash_hex}"
+            # HMAC-SHA256 for deterministic, secure pseudonymization
+            # We combine value + seed for extra entropy
+            message = f"{val_str}_{seed}".encode('utf-8')
+            signature = hmac.new(secret_key, message, hashlib.sha256).hexdigest()
+            
+            # Truncate to 12 characters for usability while maintaining high collision resistance
+            hash_part = signature[:12].upper()
+            pseudonym = f"{prefix}{hash_part}"
 
-            # Cache it
             self._pseudonym_cache[val_str] = pseudonym
             return pseudonym
 

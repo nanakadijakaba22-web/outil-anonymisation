@@ -44,6 +44,7 @@ export interface ColumnClassification {
   sensitivity_type: 'direct_identifier' | 'quasi_identifier' | 'sensitive' | 'non_sensitive';
   category: 'personal' | 'financial' | 'health' | 'insurance' | 'other';
   confidence: number;
+  risk_score: number;
   justification: string;
 }
 

@@ -80,6 +80,7 @@ class ColumnClassification(BaseModel):
     sensitivity_type: DataType
     category: Category
     confidence: float = Field(ge=0, le=100, description="Confidence score 0-100")
+    risk_score: float = Field(ge=0, le=100, description="Risk score 0-100 based on sensitivity type")
     justification: str
 
 

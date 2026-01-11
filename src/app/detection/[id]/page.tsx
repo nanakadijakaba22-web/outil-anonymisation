@@ -243,11 +243,27 @@ export default function DetectionPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-gray-800">
-                        {Math.round(classification.confidence)}%
+                    <div className="text-right flex gap-6">
+                      <div>
+                        <div className="text-2xl font-bold text-gray-800">
+                          {Math.round(classification.confidence)}%
+                        </div>
+                        <div className="text-sm text-gray-600">Confiance</div>
                       </div>
-                      <div className="text-sm text-gray-600">Confiance</div>
+                      <div>
+                        <div className={`text-2xl font-bold ${
+                          classification.risk_score >= 40
+                            ? 'text-red-600'
+                            : classification.risk_score >= 25
+                            ? 'text-orange-600'
+                            : classification.risk_score >= 20
+                            ? 'text-blue-600'
+                            : 'text-green-600'
+                        }`}>
+                          {Math.round(classification.risk_score)}%
+                        </div>
+                        <div className="text-sm text-gray-600">Risque</div>
+                      </div>
                     </div>
                   </div>
                   <p className="text-sm text-gray-700 mt-3">

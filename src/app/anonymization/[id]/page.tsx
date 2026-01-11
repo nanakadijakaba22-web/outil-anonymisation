@@ -59,26 +59,73 @@ export default function AnonymizationPage() {
             // Recommend technique based on sensitivity and category
             let technique: TechniqueType = 'masking';
             let params: Record<string, any> = {};
+            const colNameLower = columnName.toLowerCase();
 
             if (classification.sensitivity_type === 'direct_identifier') {
               if (classification.category === 'personal') {
-                // NAS, email, phone -> suppression or masking
-                if (columnName.toLowerCase().includes('nas')) {
+                // NAS -> suppression (ultra-sensitive)
+                if (colNameLower.includes('nas') || colNameLower.includes('sin')) {
                   technique = 'suppression';
-                } else {
+                }
+                // Names -> pseudonymization
+                else if (colNameLower.includes('nom') || colNameLower.includes('prenom') ||
+                         colNameLower.includes('name') || colNameLower.includes('firstname')) {
+                  technique = 'pseudonymization';
+                  params = { prefix: 'PERSON_' };
+                }
+                // Email, phone -> masking
+                else {
                   technique = 'masking';
                   params = { visible_chars: 2 };
+                }
+              } else if (classification.category === 'financial') {
+                // Credit cards, account numbers -> masking or suppression
+                if (colNameLower.includes('carte') || colNameLower.includes('card') ||
+                    colNameLower.includes('credit')) {
+                  technique = 'masking';
+                  params = { visible_chars: 4 };  // Show last 4 digits for cards
+                } else if (colNameLower.includes('compte') || colNameLower.includes('account') ||
+                           colNameLower.includes('numero') || colNameLower.includes('number')) {
+                  technique = 'masking';
+                  params = { visible_chars: 2 };
+                } else {
+                  technique = 'pseudonymization';
+                  params = { prefix: 'ID_' };
                 }
               } else {
                 technique = 'pseudonymization';
                 params = { prefix: 'ID_' };
               }
             } else if (classification.sensitivity_type === 'quasi_identifier') {
-              technique = 'generalization';
-              params = { bins: 5 };
+              // Age -> generalization with age ranges
+              if (colNameLower.includes('age')) {
+                technique = 'generalization';
+                params = { method: 'range', range_size: 10 };  // 10-year ranges
+              }
+              // Postal codes -> generalization (keep prefix only)
+              else if (colNameLower.includes('postal') || colNameLower.includes('code_postal')) {
+                technique = 'generalization';
+                params = { method: 'prefix', prefix_length: 3 };
+              }
+              // Dates -> year only
+              else if (colNameLower.includes('date') || colNameLower.includes('naissance')) {
+                technique = 'generalization';
+                params = { method: 'year_only' };
+              }
+              // Other quasi-identifiers
+              else {
+                technique = 'generalization';
+                params = { method: 'range', range_size: 5 };
+              }
             } else if (classification.sensitivity_type === 'sensitive') {
-              technique = 'generalization';
-              params = { bins: 3 };
+              // Financial amounts (revenue, balance) -> generalization
+              if (classification.category === 'financial') {
+                technique = 'generalization';
+                params = { method: 'range', range_size: 10000 };  // 10k ranges for money
+              } else {
+                technique = 'generalization';
+                params = { method: 'range', range_size: 5 };
+              }
             }
 
             initialConfigs[columnName] = {
@@ -132,7 +179,7 @@ export default function AnonymizationPage() {
       case 'masking':
         return { visible_chars: 2 };
       case 'generalization':
-        return { bins: 5 };
+        return { method: 'range', range_size: 5 };
       case 'suppression':
         return {};
       case 'pseudonymization':
@@ -318,21 +365,73 @@ export default function AnonymizationPage() {
                 )}
 
                 {config.technique === 'generalization' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nombre de groupes (bins)
-                    </label>
-                    <input
-                      type="number"
-                      min="2"
-                      max="10"
-                      value={config.params.bins || 5}
-                      onChange={(e) => updateParam(columnName, 'bins', parseInt(e.target.value))}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <p className="text-sm text-gray-500 mt-1">
-                      Exemple: 75000 → "75000-100000"
-                    </p>
+                  <div className="space-y-4">
+                    {/* Method selector */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Méthode de généralisation
+                      </label>
+                      <select
+                        value={config.params.method || 'range'}
+                        onChange={(e) => updateParam(columnName, 'method', e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="range">Plages (Range)</option>
+                        <option value="year_only">Année uniquement</option>
+                        <option value="prefix">Préfixe uniquement</option>
+                      </select>
+                    </div>
+
+                    {/* Range size parameter */}
+                    {(config.params.method === 'range' || !config.params.method) && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Taille des plages
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100000"
+                          value={config.params.range_size || 5}
+                          onChange={(e) => updateParam(columnName, 'range_size', parseInt(e.target.value))}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <p className="text-sm text-gray-500 mt-1">
+                          Exemple: 75 (range_size=10) → "70-80"
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Prefix length parameter */}
+                    {config.params.method === 'prefix' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Longueur du préfixe
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={config.params.prefix_length || 3}
+                          onChange={(e) => updateParam(columnName, 'prefix_length', parseInt(e.target.value))}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <p className="text-sm text-gray-500 mt-1">
+                          Exemple: H3B 1A1 (length=3) → "H3B"
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Year only - no params needed */}
+                    {config.params.method === 'year_only' && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p className="text-sm text-blue-800">
+                          Les dates seront converties en année uniquement.
+                          <br />
+                          Exemple: 1990-05-15 → 1990
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 

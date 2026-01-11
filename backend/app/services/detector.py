@@ -46,8 +46,17 @@ class SensitiveDataDetector:
         # Canadian postal code: H3B 1A1, H3B1A1
         "CODE_POSTAL_CA": r"^[A-Z]\d[A-Z][\s]?\d[A-Z]\d$",
 
-        # Date formats: YYYY-MM-DD, DD/MM/YYYY, etc.
-        "DATE": r"^\d{4}[-/]\d{2}[-/]\d{2}$|^\d{2}[-/]\d{2}[-/]\d{4}$",
+        # Credit cards: Visa, Mastercard, Amex, Discover (with/without spaces/dashes)
+        "CREDIT_CARD": r"^(?:\d{4}[-\s]?){3}\d{4}$|^\d{4}[-\s]?\d{6}[-\s]?\d{5}$",
+
+        # Account numbers: 8-16 digits, but we verify with Luhn and keyword context
+        "ACCOUNT_NUMBER": r"^\d{8,16}$",
+
+        # Simplified date formats for initial regex, but will use pandas for validation
+        "DATE": r"^\d{4}[-/]\d{2}[-/]\d{2}$|^\d{2}[-/]\d{2}[-/]\d{4}$|^\d{1,2}/\d{1,2}/\d{2,4}$",
+
+        # Age format: 1-120 (basic numeric check for age)
+        "AGE": r"^(?:[1-9][0-9]?|1[01][0-9]|120)$",
     }
 
     # Column name keywords for classification
@@ -59,24 +68,27 @@ class SensitiveDataDetector:
             "email", "courriel", "e-mail",
             "nas", "sin", "social_insurance",
             "telephone", "phone", "tel", "mobile", "cellulaire",
+            "carte", "card", "credit_card", "carte_credit",
+            "numero_compte", "account_number", "no_compte", "num_compte",
         ],
 
         # Quasi-identifiers
         "QUASI": [
             "date_naissance", "birthdate", "dob", "birth_date", "naissance",
-            "age", "age_",
+            "age", "age_", "âge",
             "postal", "zip", "code_postal", "zip_code",
             "genre", "gender", "sexe", "sex",
             "adresse", "address", "rue", "street",
-            "ville", "city", "province", "state",
+            "ville", "city", "province", "state", "lieu", "localisation", "location",
+            "type_compte", "account_type", "type_account", "compte",
         ],
 
-        # Financial data (sensitive)
+        # Financial data (sensitive) - AMOUNTS ONLY, not account identifiers
         "FINANCIAL": [
             "revenu", "income", "salary", "salaire", "wage",
             "solde", "balance", "montant", "amount",
-            "compte", "account", "credit", "debit",
             "prix", "price", "cout", "cost",
+            "transaction", "paiement", "payment",
         ],
 
         # Health data (sensitive)
@@ -90,6 +102,14 @@ class SensitiveDataDetector:
         "INSURANCE": [
             "assurance", "insurance", "police", "policy",
             "prime", "premium", "couverture", "coverage",
+        ],
+
+        # Categorical/Non-sensitive (type, status, category fields)
+        "CATEGORICAL": [
+            "type",
+            "statut", "status", "etat", "state",
+            "categorie", "category", "classe", "class",
+            "niveau", "level", "grade",
         ],
     }
 
@@ -212,6 +232,9 @@ class SensitiveDataDetector:
             category = cat
             justification_parts.append(f"Nom de colonne suggère {cat.value}")
 
+            # If detected by name, reduce NON_SENSITIVE baseline to avoid false negatives
+            scores[DataType.NON_SENSITIVE] = 0
+
         # 2. Check pattern matching on values
         pattern_check = self._check_patterns(sample_values)
         if pattern_check:
@@ -228,13 +251,33 @@ class SensitiveDataDetector:
                 scores[DataType.DIRECT_IDENTIFIER] += score
                 category = Category.PERSONAL
                 justification_parts.append("Format téléphone détecté")
+            elif pattern_type == "CREDIT_CARD":
+                scores[DataType.DIRECT_IDENTIFIER] += score
+                category = Category.FINANCIAL
+                justification_parts.append("Format carte de crédit détecté")
+            elif pattern_type == "ACCOUNT_NUMBER":
+                # For account numbers, we only increase score if keywords match OR it passes Luhn
+                keyword_match = any(kw in col_name_lower for kw in ["compte", "account", "iban", "rib"])
+                luhn_valid = all(self._is_luhn_valid(str(v)) for v in sample_values[:5])
+                if keyword_match or luhn_valid:
+                    scores[DataType.DIRECT_IDENTIFIER] += score
+                    category = Category.FINANCIAL
+                    justification_parts.append("Format numéro de compte validé (heuristique/Luhn)")
             elif pattern_type == "CODE_POSTAL_CA":
                 scores[DataType.QUASI_IDENTIFIER] += score
                 category = Category.PERSONAL
                 justification_parts.append("Format code postal détecté")
             elif pattern_type == "DATE":
-                scores[DataType.QUASI_IDENTIFIER] += score
-                justification_parts.append("Format date détecté")
+                # Validate with pandas
+                valid_dates = pd.to_datetime(sample_values, errors='coerce').notna().sum()
+                if valid_dates / len(sample_values) > 0.5:
+                    scores[DataType.QUASI_IDENTIFIER] += score
+                    justification_parts.append("Format date validé par parsing")
+            elif pattern_type == "AGE":
+                # Age pattern is weak, so we only add score if column name also suggests age
+                if any(kw in col_name_lower for kw in ["age", "naissance", "birth"]):
+                    scores[DataType.QUASI_IDENTIFIER] += score
+                    justification_parts.append("Format âge détecté")
 
         # 3. Statistical analysis - uniqueness
         if unique_ratio > 0.95:
@@ -245,8 +288,10 @@ class SensitiveDataDetector:
             scores[DataType.QUASI_IDENTIFIER] += 15
         elif unique_ratio < 0.1:
             # Low uniqueness -> might be categorical
-            scores[DataType.NON_SENSITIVE] += 10
-            justification_parts.append(f"Faible unicité ({unique_ratio:.1%})")
+            # BUT: don't override if already detected by column name
+            if not name_check:
+                scores[DataType.NON_SENSITIVE] += 10
+                justification_parts.append(f"Faible unicité ({unique_ratio:.1%})")
 
         # 4. Data type heuristics
         if "int64" in data_type or "float64" in data_type:
@@ -269,26 +314,42 @@ class SensitiveDataDetector:
         if not justification_parts:
             justification_parts.append("Classification basée sur analyse heuristique")
 
+        # Calculate risk score based on sensitivity type
+        # Using same weights as overall risk calculation
+        risk_score_map = {
+            DataType.DIRECT_IDENTIFIER: 40.0,
+            DataType.QUASI_IDENTIFIER: 25.0,
+            DataType.SENSITIVE: 20.0,
+            DataType.NON_SENSITIVE: 0.0,
+        }
+        risk_score = risk_score_map.get(final_type, 0.0)
+
         return ColumnClassification(
             column_name=column_name,
             sensitivity_type=final_type,
             category=category,
             confidence=confidence,
+            risk_score=risk_score,
             justification="; ".join(justification_parts),
         )
 
     def _check_column_name(self, col_name_lower: str) -> tuple[DataType, Category, float] | None:
         """Check if column name matches known patterns."""
 
-        # Check direct identifiers
+        # Check direct identifiers (MOST SPECIFIC)
         for keyword in self.COLUMN_NAME_KEYWORDS["DIRECT"]:
             if keyword in col_name_lower:
-                return (DataType.DIRECT_IDENTIFIER, Category.PERSONAL, 60)
+                # Determine category based on keyword
+                if keyword in ["carte", "card", "credit_card", "carte_credit",
+                              "numero_compte", "account_number", "no_compte", "num_compte"]:
+                    return (DataType.DIRECT_IDENTIFIER, Category.FINANCIAL, 60)
+                else:
+                    return (DataType.DIRECT_IDENTIFIER, Category.PERSONAL, 60)
 
         # Check quasi-identifiers
         for keyword in self.COLUMN_NAME_KEYWORDS["QUASI"]:
             if keyword in col_name_lower:
-                return (DataType.QUASI_IDENTIFIER, Category.PERSONAL, 50)
+                return (DataType.QUASI_IDENTIFIER, Category.PERSONAL, 65)
 
         # Check financial
         for keyword in self.COLUMN_NAME_KEYWORDS["FINANCIAL"]:
@@ -305,7 +366,24 @@ class SensitiveDataDetector:
             if keyword in col_name_lower:
                 return (DataType.SENSITIVE, Category.INSURANCE, 50)
 
+        # Check categorical/non-sensitive (LEAST SPECIFIC - check last)
+        for keyword in self.COLUMN_NAME_KEYWORDS["CATEGORICAL"]:
+            if keyword in col_name_lower:
+                return (DataType.NON_SENSITIVE, Category.OTHER, 70)
+
         return None
+
+    def _is_luhn_valid(self, n: str) -> bool:
+        """Check if a string of digits passes the Luhn algorithm."""
+        digits = [int(d) for d in re.sub(r"\D", "", n)]
+        if not digits:
+            return False
+        odd_digits = digits[-1::-2]
+        even_digits = digits[-2::-2]
+        total = sum(odd_digits)
+        for d in even_digits:
+            total += sum(divmod(2 * d, 10))
+        return total % 10 == 0
 
     def _check_patterns(self, sample_values: List[Any]) -> tuple[str, float] | None:
         """
