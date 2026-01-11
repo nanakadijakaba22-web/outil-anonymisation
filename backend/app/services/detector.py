@@ -59,6 +59,10 @@ class SensitiveDataDetector:
             "email", "courriel", "e-mail",
             "nas", "sin", "social_insurance",
             "telephone", "phone", "tel", "mobile", "cellulaire",
+            # Identifiants uniques (IDs)
+            "id_client", "client_id", "customer_id", "user_id", "userid",
+            "identifiant", "identifier", "numero_client", "customer_number",
+            "no_client", "client_no", "account_id", "compte_id",
         ],
 
         # Quasi-identifiers
@@ -211,6 +215,12 @@ class SensitiveDataDetector:
             scores[sensitivity] += score
             category = cat
             justification_parts.append(f"Nom de colonne suggère {cat.value}")
+
+        # Special case: column named exactly "id" or ending with "_id" with high uniqueness
+        if (col_name_lower == "id" or col_name_lower.endswith("_id")) and unique_ratio > 0.9:
+            scores[DataType.DIRECT_IDENTIFIER] += 60
+            category = Category.PERSONAL
+            justification_parts.append("Identifiant unique détecté (ID)")
 
         # 2. Check pattern matching on values
         pattern_check = self._check_patterns(sample_values)
