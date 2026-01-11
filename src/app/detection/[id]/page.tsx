@@ -9,6 +9,8 @@ import {
   formatSensitivityType,
   formatCategory,
 } from '@/lib/utils';
+import Stepper from '@/components/Stepper';
+import ProgressBadge from '@/components/ProgressBadge';
 
 export default function DetectionPage() {
   const router = useRouter();
@@ -96,6 +98,9 @@ export default function DetectionPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Progress Badge */}
+      <ProgressBadge currentStep="detection" completedSteps={['upload']} />
+
       <div className="container mx-auto px-4 py-12">
         {/* Header */}
         <div className="text-center mb-8">
@@ -109,6 +114,13 @@ export default function DetectionPage() {
             {dataset.row_count} lignes × {dataset.column_count} colonnes
           </p>
         </div>
+
+        {/* Stepper Navigation */}
+        <Stepper
+          currentStep="detection"
+          datasetId={datasetId}
+          completedSteps={['upload']}
+        />
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">

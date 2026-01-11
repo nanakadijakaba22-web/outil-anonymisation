@@ -1,15 +1,17 @@
 """
-Anonymization service implementing 4 techniques for Quebec Law 25 compliance.
+Anonymization service implementing 5 techniques for Quebec Law 25 compliance.
 
 Techniques:
 1. Masking - Partial character replacement (emails, phones)
 2. Generalization - Replace with broader categories (ages, incomes)
 3. Suppression - Complete column removal (NAS, SSN)
 4. Pseudonymization - Consistent fake ID generation (names)
+5. Differential Privacy - Mathematical noise addition for formal guarantees (OPTIONAL)
 """
 import hashlib
+import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 from uuid import UUID
 
@@ -20,6 +22,7 @@ from app.models.database import (
     Dataset,
     AnonymizationJob,
     TransformationLog,
+    SuppressedColumn,
 )
 from app.models.schemas import (
     AnonymizationConfig,
@@ -30,6 +33,9 @@ from app.models.schemas import (
     DatasetCreate,
 )
 from app.services.data_ingestion import DataIngestionService
+from app.services.differential_privacy import DifferentialPrivacyEngine, DPMechanism
+
+logger = logging.getLogger(__name__)
 
 
 class Anonymizer:
@@ -58,7 +64,7 @@ class Anonymizer:
         Returns:
             AnonymizationResponse with job details and new dataset ID
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         # Load dataset
         dataset = self.ingestion_service.get_dataset(dataset_id)
@@ -87,6 +93,8 @@ class Anonymizer:
                     df=df,
                     original_df=original_df,
                     config=conf,
+                    job_id=job.id,
+                    dataset_id=dataset_id,
                 )
 
                 transformations.append(transformation)
@@ -110,7 +118,7 @@ class Anonymizer:
             )
 
             # Update job
-            end_time = datetime.utcnow()
+            end_time = datetime.now(timezone.utc)
             processing_time = (end_time - start_time).total_seconds()
 
             job.status = JobStatus.COMPLETED.value
@@ -118,6 +126,38 @@ class Anonymizer:
             job.processing_time_seconds = processing_time
             job.rows_processed = len(df)
             job.output_dataset_id = anonymized_dataset.id
+
+            # CRITICAL: Post-anonymization verification
+            # Re-run detection to ensure no direct identifiers remain
+            from app.services.verification import PostAnonymizationVerifier
+            verifier = PostAnonymizationVerifier(self.db)
+            verification = await verifier.verify_anonymization(
+                anonymized_dataset.id,
+                job.id
+            )
+
+            # If verification failed, update dataset status
+            if not verification.passed:
+                anonymized_dataset.is_loi25_compliant = False
+                anonymized_dataset.risk_score = max(verification.overall_risk_score, 25.0)
+
+                # Add warning to job
+                job.error_message = (
+                    f"AVERTISSEMENT: Vérification post-anonymisation a échoué. "
+                    f"{verification.failure_reason} "
+                    f"Recommandations: {'; '.join(verification.recommendations[:2])}"
+                )
+
+                logger.warning(
+                    f"Post-anonymization verification FAILED for job {job.id}. "
+                    f"Reason: {verification.failure_reason}"
+                )
+            else:
+                logger.info(
+                    f"Post-anonymization verification PASSED for job {job.id}. "
+                    f"k-anonymity: {verification.k_anonymity_value}, "
+                    f"Risk: {verification.overall_risk_score:.1f}%"
+                )
 
             self.db.commit()
 
@@ -140,6 +180,8 @@ class Anonymizer:
         df: pd.DataFrame,
         original_df: pd.DataFrame,
         config: AnonymizationConfig,
+        job_id: UUID,
+        dataset_id: UUID,
     ) -> Tuple[pd.DataFrame, TransformationDetail]:
         """Apply a specific anonymization technique to a column."""
 
@@ -157,10 +199,13 @@ class Anonymizer:
             df = self._generalize_column(df, column, params)
 
         elif technique == AnonymizationTechnique.SUPPRESSION:
-            df = self._suppress_column(df, column)
+            df = self._suppress_column(df, column, job_id, dataset_id)
 
         elif technique == AnonymizationTechnique.PSEUDONYMIZATION:
             df = self._pseudonymize_column(df, column, params)
+
+        elif technique == AnonymizationTechnique.DIFFERENTIAL_PRIVACY:
+            df = self._add_differential_privacy(df, column, params)
 
         # Get sample after transformations
         if column in df.columns:
@@ -283,12 +328,58 @@ class Anonymizer:
         except (ValueError, TypeError):
             return str(value)
 
-    def _suppress_column(self, df: pd.DataFrame, column: str) -> pd.DataFrame:
+    def _suppress_column(
+        self,
+        df: pd.DataFrame,
+        column: str,
+        job_id: UUID,
+        dataset_id: UUID
+    ) -> pd.DataFrame:
         """
-        Suppression: Complete column removal.
+        Suppression: Complete column removal with audit trail.
+
+        CRITICAL: We must log suppressed columns for compliance and auditability.
         """
-        if column in df.columns:
-            df = df.drop(columns=[column])
+        if column not in df.columns:
+            return df
+
+        # Capture metadata BEFORE suppression
+        col_data = df[column]
+        col_position = df.columns.get_loc(column)
+        col_dtype = str(col_data.dtype)
+
+        # Statistics
+        row_count = len(col_data)
+        unique_count = int(col_data.nunique())
+        null_count = int(col_data.isnull().sum())
+
+        # Sample values (sanitized - only first 3 for audit)
+        sample_values = col_data.head(3).astype(str).tolist()
+
+        # Create audit trail record
+        suppressed_record = SuppressedColumn(
+            job_id=job_id,
+            dataset_id=dataset_id,
+            column_name=column,
+            column_position=col_position,
+            data_type=col_dtype,
+            row_count=row_count,
+            unique_count=unique_count,
+            null_count=null_count,
+            sample_values=sample_values,
+            reason=f"Suppression technique applied to column '{column}'",
+        )
+
+        self.db.add(suppressed_record)
+        self.db.flush()  # Persist immediately
+
+        logger.info(
+            f"Column '{column}' suppressed from dataset {dataset_id}. "
+            f"Audit record created: {suppressed_record.id}"
+        )
+
+        # Now perform the actual suppression
+        df = df.drop(columns=[column])
         return df
 
     def _pseudonymize_column(
@@ -327,6 +418,59 @@ class Anonymizer:
             return pseudonym
 
         df[column] = df[column].apply(pseudonymize_value)
+        return df
+
+    def _add_differential_privacy(
+        self,
+        df: pd.DataFrame,
+        column: str,
+        params: Dict[str, Any]
+    ) -> pd.DataFrame:
+        """
+        Differential Privacy: Add calibrated noise for formal privacy guarantees.
+
+        IMPORTANT: This is OPTIONAL and reduces data utility. Use only when:
+        - Formal mathematical privacy guarantees are required
+        - Statistical analysis will be performed
+        - Individual-level precision is not critical
+
+        Params:
+            epsilon: Privacy budget (default: 1.0)
+                    - Strong: < 0.1 (very noisy)
+                    - Moderate: 1.0 (US Census standard)
+                    - Weak: > 10 (minimal noise)
+            delta: Failure probability for Gaussian (default: 1e-5)
+            mechanism: "laplace" (pure DP) or "gaussian" (approximate DP)
+            sensitivity: Manual sensitivity override (auto-calculated if None)
+            clip_to_range: Keep values in original [min, max] (default: True)
+        """
+        epsilon = params.get("epsilon", 1.0)
+        delta = params.get("delta", 1e-5)
+        mechanism_str = params.get("mechanism", "laplace")
+        sensitivity = params.get("sensitivity", None)
+        clip_to_range = params.get("clip_to_range", True)
+
+        # Convert mechanism string to enum
+        mechanism = DPMechanism.LAPLACE if mechanism_str == "laplace" else DPMechanism.GAUSSIAN
+
+        # Create DP engine
+        dp_engine = DifferentialPrivacyEngine(epsilon=epsilon, delta=delta)
+
+        # Apply noise to column
+        df, metadata = dp_engine.apply_to_column(
+            df=df,
+            column_name=column,
+            mechanism=mechanism,
+            sensitivity=sensitivity,
+            clip_to_range=clip_to_range
+        )
+
+        logger.info(
+            f"Applied differential privacy to '{column}': "
+            f"mechanism={metadata['mechanism']}, ε={metadata['epsilon']}, "
+            f"noise_magnitude={metadata['noise_magnitude']:.2f}"
+        )
+
         return df
 
     async def _save_anonymized_dataset(

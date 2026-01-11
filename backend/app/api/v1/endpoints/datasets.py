@@ -13,6 +13,7 @@ from app.services.data_ingestion import DataIngestionService
 from app.services.detector import SensitiveDataDetector
 from app.services.risk_evaluator import RiskEvaluator
 from app.services.report_generator import PDFReportGenerator
+from app.services.visualization import DataVisualizationService
 
 router = APIRouter()
 
@@ -72,6 +73,85 @@ def get_dataset_preview(
 
     service = DataIngestionService(db)
     return service.get_dataset_preview(dataset_id, n_rows)
+
+
+@router.get("/{dataset_id}/statistics")
+def get_dataset_statistics(
+    dataset_id: UUID,
+    db: Session = Depends(get_db)
+) -> dict:
+    """
+    Get comprehensive statistical analysis and visualization data for a dataset.
+
+    - **dataset_id**: UUID of the dataset to analyze
+
+    Returns detailed statistics including:
+
+    **Overview:**
+    - Total rows, columns
+    - Numeric vs categorical breakdown
+    - Memory usage
+    - Duplicate rows count
+
+    **Numeric Statistics:**
+    - Mean, median, std, min, max
+    - Quartiles (Q1, Q2, Q3)
+    - Skewness, kurtosis
+    - Range, IQR
+
+    **Categorical Statistics:**
+    - Unique values count
+    - Mode and frequency
+    - Top 10 most common values
+    - Entropy (diversity measure)
+
+    **Missing Data Analysis:**
+    - Total missing values
+    - Missing percentage per column
+
+    **Distributions:**
+    - Histogram data for numeric columns (bins + counts)
+    - Frequency data for categorical columns (top 20 values)
+
+    **Correlation Analysis:**
+    - Correlation matrix for numeric columns
+    - Strong correlations (|r| > 0.7)
+
+    **Outlier Detection:**
+    - Outlier count and percentage per column (IQR method)
+    - Upper and lower bounds
+
+    **Use Cases:**
+    - Data exploration and understanding
+    - Frontend visualization (charts, graphs)
+    - Quality assessment
+    - Before/after anonymization comparison
+    """
+    viz_service = DataVisualizationService(db)
+    return viz_service.generate_statistics(dataset_id)
+
+
+@router.get("/{dataset_id}/compare/{anonymized_id}")
+def compare_datasets(
+    dataset_id: UUID,
+    anonymized_id: UUID,
+    db: Session = Depends(get_db)
+) -> dict:
+    """
+    Compare original and anonymized datasets.
+
+    - **dataset_id**: UUID of the original dataset
+    - **anonymized_id**: UUID of the anonymized dataset
+
+    Returns comparison metrics:
+    - Column changes (removed, added, retained)
+    - Statistical changes (mean, std, range)
+    - Row count changes
+
+    **Use Case:** Understand impact of anonymization on data utility
+    """
+    viz_service = DataVisualizationService(db)
+    return viz_service.compare_datasets(dataset_id, anonymized_id)
 
 
 @router.post("/{dataset_id}/detect", response_model=DetectionReport)
@@ -174,6 +254,7 @@ async def generate_compliance_report(
     - Risk assessment details (individualization, correlation, inference)
     - Sensitive data detection results
     - Anonymization transformations (if applicable)
+    - Data visualization (histograms, correlations, outliers)
     - Actionable recommendations
 
     The report is suitable for compliance audits and stakeholder communication.
@@ -227,13 +308,23 @@ async def generate_compliance_report(
             transformations=transformations
         )
 
+    # Get visualization data (optional)
+    visualization_data = None
+    try:
+        viz_service = DataVisualizationService(db)
+        visualization_data = viz_service.generate_statistics(dataset_id)
+    except Exception:
+        # Visualization not available or failed - continue without it
+        pass
+
     # Generate PDF
     generator = PDFReportGenerator()
     pdf_buffer = generator.generate_compliance_report(
         dataset=DatasetResponse.model_validate(dataset),
         detection_report=detection_report,
         risk_assessment=risk_assessment,
-        anonymization_response=anonymization_response
+        anonymization_response=anonymization_response,
+        visualization_data=visualization_data
     )
 
     # Return PDF as streaming response

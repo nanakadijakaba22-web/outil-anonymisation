@@ -2,7 +2,7 @@
 SQLAlchemy ORM models for database tables.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text, JSON
@@ -10,6 +10,11 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+
+
+def utc_now():
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 
 
 class Dataset(Base):
@@ -25,7 +30,7 @@ class Dataset(Base):
     file_path = Column(String(512), nullable=False)  # Path to stored file
     row_count = Column(Integer, nullable=False)
     column_count = Column(Integer, nullable=False)
-    upload_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    upload_date = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     # Risk assessment
     risk_score = Column(Float, nullable=True)  # Overall risk score (0-100)
@@ -100,8 +105,8 @@ class AnonymizationJob(Base):
     dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False)
 
     # Job information
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(
         String(20),
         default="pending"
@@ -147,7 +152,7 @@ class TransformationLog(Base):
 
     # Statistics
     values_affected = Column(Integer, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     # Sample transformations (for reporting)
     sample_transformations = Column(JSON, nullable=True)  # [{original: x, anonymized: y}, ...]
@@ -157,6 +162,43 @@ class TransformationLog(Base):
 
     def __repr__(self):
         return f"<TransformationLog(column={self.column_name}, technique={self.technique})>"
+
+
+class VerificationLog(Base):
+    """
+    Stores post-anonymization verification results.
+
+    Critical safety check to ensure anonymization was effective.
+    """
+
+    __tablename__ = "verification_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("anonymization_jobs.id"), nullable=False)
+    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False)
+
+    # Verification timestamp
+    verified_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    # Pass/fail status
+    passed = Column(Boolean, nullable=False)
+    failure_reason = Column(Text, nullable=True)
+
+    # Detected issues
+    direct_ids_found = Column(JSON, nullable=True)  # List of column names
+    k_value = Column(Integer, nullable=True)
+    k_violations_percentage = Column(Float, nullable=True)
+    overall_risk_score = Column(Float, nullable=False)
+
+    # Recommendations
+    recommendations = Column(JSON, nullable=True)  # List of fix recommendations
+
+    # Relationships
+    dataset = relationship("Dataset")
+
+    def __repr__(self):
+        status = "PASSED" if self.passed else "FAILED"
+        return f"<VerificationLog(dataset_id={self.dataset_id}, status={status})>"
 
 
 class RiskAssessment(Base):
@@ -170,7 +212,7 @@ class RiskAssessment(Base):
     dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False)
 
     # Assessment timestamp
-    assessed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    assessed_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     # Law 25 risk criteria
     individualization_score = Column(Float, nullable=False)  # 0-100
@@ -182,6 +224,10 @@ class RiskAssessment(Base):
     inference_score = Column(Float, nullable=False)  # 0-100
     inference_level = Column(String(20), nullable=False)
 
+    # k-anonymity metrics (Sweeney, 2002)
+    k_anonymity_value = Column(Integer, nullable=True)  # Minimum group size (k)
+    k_anonymity_violations = Column(Float, nullable=True)  # % of records in groups < 5
+
     # Overall assessment
     overall_score = Column(Float, nullable=False)
     overall_level = Column(String(20), nullable=False)
@@ -191,8 +237,54 @@ class RiskAssessment(Base):
     details = Column(JSON, nullable=True)  # Detailed analysis per criterion
     recommendations = Column(JSON, nullable=True)  # List of recommendations
 
+    # Visualization data (Phase 3: Enhanced data visualization)
+    visualization_data = Column(JSON, nullable=True)  # Compact summary for charts/graphs
+
     # Relationships
     dataset = relationship("Dataset")
 
     def __repr__(self):
         return f"<RiskAssessment(dataset_id={self.dataset_id}, overall={self.overall_level})>"
+
+
+class SuppressedColumn(Base):
+    """
+    Stores audit trail for suppressed (deleted) columns.
+
+    Critical for compliance: When columns are completely removed,
+    we must maintain a record of what was deleted, when, and why.
+    """
+
+    __tablename__ = "suppressed_columns"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("anonymization_jobs.id"), nullable=False)
+    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False)
+
+    # Column information
+    column_name = Column(String(255), nullable=False)
+    column_position = Column(Integer, nullable=False)  # Original position in dataset
+    data_type = Column(String(50), nullable=False)  # Original data type
+
+    # Sensitivity information (why was it suppressed?)
+    sensitivity_type = Column(String(50), nullable=True)  # direct_identifier, etc.
+    sensitivity_category = Column(String(50), nullable=True)  # personal, financial, etc.
+
+    # Statistics (before suppression)
+    row_count = Column(Integer, nullable=False)  # How many values were deleted
+    unique_count = Column(Integer, nullable=True)  # How many unique values
+    null_count = Column(Integer, nullable=True)  # How many null values
+
+    # Sample values (for audit, encrypted/hashed in production)
+    sample_values = Column(JSON, nullable=True)  # First 3-5 values (sanitized)
+
+    # Metadata
+    suppressed_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    reason = Column(Text, nullable=True)  # Justification for suppression
+
+    # Relationships
+    job = relationship("AnonymizationJob")
+    dataset = relationship("Dataset")
+
+    def __repr__(self):
+        return f"<SuppressedColumn(column={self.column_name}, job_id={self.job_id})>"

@@ -5,6 +5,9 @@ import { useRouter, useParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { RiskAssessment, Dataset } from '@/lib/api';
 import { getRiskLevelColor, getRiskGaugeColor } from '@/lib/utils';
+import Stepper from '@/components/Stepper';
+import ProgressBadge from '@/components/ProgressBadge';
+import InteractiveCharts from '@/components/InteractiveCharts';
 
 export default function ResultsPage() {
   const router = useRouter();
@@ -168,6 +171,12 @@ export default function ResultsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Progress Badge */}
+      <ProgressBadge
+        currentStep="results"
+        completedSteps={['upload', 'detection', 'anonymization']}
+      />
+
       <div className="container mx-auto px-4 py-12">
         {/* Header */}
         <div className="text-center mb-8">
@@ -181,6 +190,13 @@ export default function ResultsPage() {
             </span>
           )}
         </div>
+
+        {/* Stepper Navigation */}
+        <Stepper
+          currentStep="results"
+          datasetId={datasetId}
+          completedSteps={['upload', 'detection', 'anonymization']}
+        />
 
         {/* Compliance Status Banner */}
         <div
@@ -335,6 +351,9 @@ export default function ResultsPage() {
             </div>
           </div>
         </div>
+
+        {/* Interactive Visualizations */}
+        <InteractiveCharts datasetId={datasetId} />
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center">

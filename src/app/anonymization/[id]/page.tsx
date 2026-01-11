@@ -9,6 +9,8 @@ import {
   formatSensitivityType,
   formatTechnique,
 } from '@/lib/utils';
+import Stepper from '@/components/Stepper';
+import ProgressBadge from '@/components/ProgressBadge';
 
 type TechniqueType = 'masking' | 'generalization' | 'suppression' | 'pseudonymization';
 
@@ -202,6 +204,9 @@ export default function AnonymizationPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Progress Badge */}
+      <ProgressBadge currentStep="anonymization" completedSteps={['upload', 'detection']} />
+
       <div className="container mx-auto px-4 py-12">
         {/* Header */}
         <div className="text-center mb-8">
@@ -213,6 +218,13 @@ export default function AnonymizationPage() {
             {configEntries.length} colonnes à anonymiser
           </p>
         </div>
+
+        {/* Stepper Navigation */}
+        <Stepper
+          currentStep="anonymization"
+          datasetId={datasetId}
+          completedSteps={['upload', 'detection']}
+        />
 
         {/* Info Banner */}
         <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-8">

@@ -44,6 +44,7 @@ class AnonymizationTechnique(str, Enum):
     GENERALIZATION = "generalization"
     SUPPRESSION = "suppression"
     PSEUDONYMIZATION = "pseudonymization"
+    DIFFERENTIAL_PRIVACY = "differential_privacy"
 
 
 class JobStatus(str, Enum):
