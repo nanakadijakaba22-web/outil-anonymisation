@@ -4,8 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { formatFileSize } from '@/lib/utils';
-import Stepper from '@/components/Stepper';
-import ProgressBadge from '@/components/ProgressBadge';
 
 export default function Home() {
   const router = useRouter();
@@ -79,12 +77,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Progress Badge */}
-      <ProgressBadge currentStep="upload" completedSteps={[]} />
-
       <div className="container mx-auto px-4 py-12">
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-12">
           <h1 className="text-5xl font-bold text-gray-900 mb-4">
             Annoy
           </h1>
@@ -95,9 +90,6 @@ export default function Home() {
             Conforme à la Loi 25 du Québec
           </p>
         </div>
-
-        {/* Stepper Navigation */}
-        <Stepper currentStep="upload" completedSteps={[]} />
 
         {/* Main Card */}
         <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8">
