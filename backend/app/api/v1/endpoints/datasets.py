@@ -20,6 +20,7 @@ from app.models.schemas import (
 )
 from app.services.data_ingestion import DataIngestionService
 from app.services.detector import SensitiveDataDetector
+from app.services.ai_enhanced_detector import AIEnhancedDetector
 from app.services.risk_evaluator import RiskEvaluator
 from app.services.report_generator import PDFReportGenerator
 from app.services.visualization import DataVisualizationService
@@ -173,6 +174,11 @@ async def detect_sensitive_data(
 
     - **dataset_id**: UUID of the dataset to analyze
 
+    **Detection Strategy:**
+    - Uses rule-based heuristics (fast, always available)
+    - Optionally enhanced with Groq AI for ambiguous cases (if GROQ_API_KEY is set)
+    - For columns with confidence < 70%, AI provides additional validation
+
     Returns detailed classification of each column:
     - **Direct identifiers**: NAS, email, phone numbers, names
     - **Quasi-identifiers**: Date of birth, postal code, gender, age
@@ -184,8 +190,13 @@ async def detect_sensitive_data(
     - Confidence score (0-100%)
     - Justification for classification
     - Overall dataset risk score
+
+    **AI Enhancement:**
+    If GROQ_API_KEY is configured, AI will improve classification accuracy
+    for ambiguous columns. Justifications starting with [IA] indicate AI-enhanced results.
     """
-    detector = SensitiveDataDetector(db)
+    # Use AI-enhanced detector which falls back to rule-based if AI unavailable
+    detector = AIEnhancedDetector(db)
     return await detector.analyze_dataset(dataset_id)
 
 

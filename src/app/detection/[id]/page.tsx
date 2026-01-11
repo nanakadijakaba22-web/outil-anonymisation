@@ -8,6 +8,8 @@ import {
   getSensitivityColor,
   formatSensitivityType,
   formatCategory,
+  calculateColumnRiskScore,
+  getRiskScoreColor,
 } from '@/lib/utils';
 import Stepper from '@/components/Stepper';
 import ProgressBadge from '@/components/ProgressBadge';
@@ -331,6 +333,9 @@ export default function DetectionPage() {
                     Confiance
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Risque
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Justification
                   </th>
                 </tr>
@@ -389,6 +394,22 @@ export default function DetectionPage() {
                             </span>
                           )}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {(() => {
+                          const riskScore = calculateColumnRiskScore(column.sensitivity_type);
+                          const riskColors = getRiskScoreColor(riskScore);
+                          return (
+                            <div className="flex items-center">
+                              <span
+                                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${riskColors.bg} ${riskColors.text}`}
+                                title="Risque de ré-identification basé sur le type de sensibilité"
+                              >
+                                {Math.round(riskScore)}%
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4">
                         <p className="text-sm text-gray-700 max-w-md">

@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     # Anonymization Settings
     DEFAULT_PSEUDONYM_SEED: int = 42
 
+    # AI Enhanced Detection Settings
+    GROQ_API_KEY: str | None = None
+    ENABLE_AI_DETECTION: bool = False  # Enable when GROQ_API_KEY is set
+    AI_CONFIDENCE_THRESHOLD: float = 70.0  # Use AI for columns with confidence < threshold
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"  # Fast and accurate for classification
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,
