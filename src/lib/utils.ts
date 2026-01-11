@@ -146,3 +146,48 @@ export function truncate(text: string, maxLength: number): string {
 export function cn(...classes: (string | undefined | null | false)[]): string {
   return classes.filter(Boolean).join(' ');
 }
+
+// Calculate re-identification risk score from sensitivity type
+export function calculateColumnRiskScore(
+  sensitivityType: string | null
+): number {
+  switch (sensitivityType) {
+    case 'direct_identifier':
+      return 92.5; // Risque élevé (85-100%)
+    case 'quasi_identifier':
+      return 67.5; // Risque moyen-élevé (60-75%)
+    case 'sensitive':
+      return 47.5; // Risque moyen (40-55%)
+    case 'non_sensitive':
+    default:
+      return 17.5; // Risque faible (10-25%)
+  }
+}
+
+// Get risk score color (similar to getSensitivityColor)
+export function getRiskScoreColor(
+  score: number
+): { bg: string; text: string; border: string } {
+  if (score >= 75) {
+    // Risque élevé - Rouge
+    return {
+      bg: 'bg-red-100',
+      text: 'text-red-800',
+      border: 'border-red-300',
+    };
+  } else if (score >= 40) {
+    // Risque moyen - Orange
+    return {
+      bg: 'bg-orange-100',
+      text: 'text-orange-800',
+      border: 'border-orange-300',
+    };
+  } else {
+    // Risque faible - Vert
+    return {
+      bg: 'bg-green-100',
+      text: 'text-green-800',
+      border: 'border-green-300',
+    };
+  }
+}

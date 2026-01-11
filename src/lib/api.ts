@@ -45,6 +45,7 @@ export interface ColumnClassification {
   category: 'personal' | 'financial' | 'health' | 'insurance' | 'other';
   confidence: number;
   justification: string;
+  risk_score?: number; // Optionnel - Risque de ré-identification (0-100)
 }
 
 export interface DetectionReport {
