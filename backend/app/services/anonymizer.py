@@ -287,8 +287,9 @@ class Anonymizer:
         Generalization: Replace with broader categories.
 
         Params:
-            method: 'range' | 'year_only' | 'prefix' | 'custom'
+            method: 'range' | 'year_only' | 'year_month' | 'postal_code' | 'custom'
             range_size: For numeric ranges (default: 10)
+            prefix_length: For postal code prefix (default: 3)
             custom_mapping: Dict for custom mappings
         """
         method = params.get("method", "range")
@@ -301,14 +302,18 @@ class Anonymizer:
             )
 
         elif method == "year_only":
-            # Dates -> Keep year only
+            # Dates -> Keep year only (YYYY)
             df[column] = pd.to_datetime(df[column], errors='coerce').dt.year
 
-        elif method == "prefix":
-            # Keep only prefix (e.g., postal code H3B 1A1 -> H3B)
+        elif method == "year_month":
+            # Dates -> Keep year and month (YYYY-MM)
+            df[column] = pd.to_datetime(df[column], errors='coerce').dt.strftime('%Y-%m')
+
+        elif method == "postal_code":
+            # Postal code -> prefix + asterisks (e.g., "G1X 3J4" -> "G1X ***")
             prefix_length = params.get("prefix_length", 3)
             df[column] = df[column].apply(
-                lambda x: str(x)[:prefix_length] if pd.notna(x) else x
+                lambda x: self._generalize_postal_code(x, prefix_length) if pd.notna(x) else x
             )
 
         elif method == "custom":
@@ -327,6 +332,32 @@ class Anonymizer:
             return f"{lower}-{upper}"
         except (ValueError, TypeError):
             return str(value)
+
+    def _generalize_postal_code(self, value: Any, prefix_length: int) -> str:
+        """
+        Generalize postal code by keeping prefix and replacing rest with asterisks.
+        
+        Examples:
+            "G1X 3J4" -> "G1X ***" (prefix_length=3)
+            "H3B1A1" -> "H3B ***" (prefix_length=3)
+            "K1A 0B1" -> "K1A ***" (prefix_length=3)
+        """
+        if pd.isna(value):
+            return value
+        
+        postal_str = str(value).strip()
+        
+        # Remove spaces and dashes for processing
+        postal_clean = postal_str.replace(" ", "").replace("-", "")
+        
+        # Keep prefix and replace rest with asterisks
+        if len(postal_clean) > prefix_length:
+            prefix = postal_clean[:prefix_length]
+            # Use *** for visual consistency
+            return f"{prefix} ***"
+        else:
+            # If too short, just return as is
+            return postal_str
 
     def _suppress_column(
         self,
