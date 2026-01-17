@@ -135,8 +135,6 @@ export default function AnonymizationPage() {
         return { bins: 5 };
       case 'suppression':
         return {};
-      case 'pseudonymization':
-        return { prefix: 'ANON_' };
       default:
         return {};
     }
