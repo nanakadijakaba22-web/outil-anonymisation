@@ -81,7 +81,7 @@ export default function AnonymizationPage() {
 
                // Code postal => préfixe
                 if (col.includes('code_postal') || col.includes('postal') || col.includes('zip')) {
-                   params = { mode: 'prefix', prefix_len: 3 };
+                   params = { mode: 'prefix', prefix_length: 3 };
                   }
               // Date => année
                 else if (col.includes('date') || col.includes('ouverture')) {
@@ -119,7 +119,7 @@ export default function AnonymizationPage() {
       updated[columnName] = {
         ...updated[columnName],
         technique,
-        params: getDefaultParams(technique),
+        params: getDefaultParams(technique, columnName),
       };
       return updated;
     });
@@ -139,15 +139,31 @@ export default function AnonymizationPage() {
     });
   };
 
-  const getDefaultParams = (technique: TechniqueType): Record<string, any> => {
+  const getDefaultParams = (technique: TechniqueType, columnName?: string): Record<string, any> => {
     switch (technique) {
       case 'masking':
         return { visible_chars: 2 };
       case 'generalization':
-        return { mode:'bins', bins: 5 };
+        // Détection intelligente du mode selon le nom de la colonne
+        if (columnName) {
+          const col = columnName.toLowerCase();
+
+          // Code postal => préfixe
+          if (col.includes('code_postal') || col.includes('postal') || col.includes('zip') ||
+              col.includes('ville') || col.includes('city') || col.includes('nom') ||
+              col.includes('prenom') || col.includes('name')) {
+            return { mode: 'prefix', prefix_length: 3 };
+          }
+          // Date => année
+          else if (col.includes('date') || col.includes('ouverture')) {
+            return { mode: 'year' };
+          }
+        }
+        // Par défaut => bins (numérique)
+        return { mode: 'bins', bins: 5 };
       case 'suppression':
         return {};
-         case 'differential_privacy':
+      case 'differential_privacy':
         return { epsilon: 1.0, delta:1e-5, mechanism: 'gaussian' };
       default:
         return {};
@@ -159,11 +175,17 @@ export default function AnonymizationPage() {
       setProcessing(true);
       setError(null);
 
-      const configArray: AnonymizationConfig[] = Object.values(configs).map((config) => ({
-        column_name: config.column_name,
-        technique: config.technique,
-        params: config.params,
-      }));
+      const configArray: AnonymizationConfig[] = Object.values(configs).map((config) => {
+        // Nettoyer les params: enlever 'mode' car le backend ne l'utilise pas
+        const cleanParams = { ...config.params };
+        delete cleanParams.mode;
+
+        return {
+          column_name: config.column_name,
+          technique: config.technique,
+          params: cleanParams,
+        };
+      });
 
       const response = await api.anonymizeDataset(datasetId, configArray);
 
@@ -331,77 +353,95 @@ export default function AnonymizationPage() {
 
               {config.technique === 'generalization' && (
                 <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-               Type de généralisation
-              </label>
-              <select
-                 value={config.params.mode ?? 'bins'}
-                onChange={(e) => {
-                const mode = e.target.value;
-                  // reset params selon mode
-                 if (mode === 'bins') updateParam(columnName, 'mode', 'bins');
-                 if (mode === 'prefix') {
-                  updateParam(columnName, 'mode', 'prefix');
-                   updateParam(columnName, 'prefix_len', 3);
-                  }
-                   if (mode === 'year') updateParam(columnName, 'mode', 'year');
-              }}
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-      >
-        <option value="bins">Tranches (numérique)</option>
-        <option value="prefix">Préfixe (code postal)</option>
-        <option value="year">Année (date)</option>
-      </select>
-    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Mode de généralisation
+                    </label>
+                    <select
+                      value={config.params.mode || 'bins'}
+                      onChange={(e) => {
+                        const mode = e.target.value;
+                        const newParams: Record<string, any> = { mode };
 
-    {(config.params.mode ?? 'bins') === 'bins' && (
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Nombre de groupes (bins)
-        </label>
-        <input
-          type="number"
-          min="2"
-          max="10"
-          value={config.params.bins || 5}
-          onChange={(e) => updateParam(columnName, 'bins', parseInt(e.target.value))}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-        <p className="text-sm text-gray-500 mt-1">
-          Exemple: 75000 → "75000-100000"
-        </p>
-      </div>
-    )}
+                        // Définir les paramètres par défaut selon le mode
+                        if (mode === 'bins') {
+                          newParams.bins = 5;
+                        } else if (mode === 'prefix') {
+                          newParams.prefix_length = 3;
+                        }
+                        // mode 'year' ne nécessite pas de params supplémentaires
 
-    {(config.params.mode ?? 'bins') === 'prefix' && (
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Longueur du préfixe
-        </label>
-        <input
-          type="number"
-          min="1"
-          max="6"
-          value={config.params.prefix_len || 3}
-          onChange={(e) => updateParam(columnName, 'prefix_len', parseInt(e.target.value))}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-        <p className="text-sm text-gray-500 mt-1">
-          Exemple: G1V 2L9 → G1V***
-        </p>
-      </div>
-    )}
+                        setConfigs(prev => ({
+                          ...prev,
+                          [columnName]: {
+                            ...prev[columnName],
+                            params: newParams
+                          }
+                        }));
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="bins">Tranches (numérique)</option>
+                      <option value="prefix">Préfixe (texte/code postal)</option>
+                      <option value="year">Année (dates)</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Mode automatiquement sélectionné selon le type de données
+                    </p>
+                  </div>
 
-    {(config.params.mode ?? 'bins') === 'year' && (
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm text-blue-800">
-          Les dates seront généralisées à l’année (ex: 2021-08-22 → 2021).
-        </p>
-      </div>
-    )}
-  </div>
-)}
+                  {/* Paramètres pour mode bins */}
+                  {config.params.mode === 'bins' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Nombre de tranches
+                      </label>
+                      <input
+                        type="number"
+                        min="2"
+                        max="10"
+                        value={config.params.bins || 5}
+                        onChange={(e) => updateParam(columnName, 'bins', parseInt(e.target.value))}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      <p className="text-sm text-gray-500 mt-1">
+                        Exemple: 75000 → "(50000, 100000]"
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Paramètres pour mode prefix */}
+                  {config.params.mode === 'prefix' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Longueur du préfixe
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="6"
+                        value={config.params.prefix_length || 3}
+                        onChange={(e) => updateParam(columnName, 'prefix_length', parseInt(e.target.value))}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      <p className="text-sm text-gray-500 mt-1">
+                        Exemple: "Montreal" → "Mon ***"
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Info pour mode year */}
+                  {config.params.mode === 'year' && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <p className="text-sm text-blue-800">
+                        Les dates seront généralisées à l'année uniquement.
+                        <br />
+                        Exemple: "2021-08-22" → 2021
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
 
                 {config.technique === 'differential_privacy' && (
