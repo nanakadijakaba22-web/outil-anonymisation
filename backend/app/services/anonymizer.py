@@ -297,99 +297,67 @@ class Anonymizer:
         """
         Generalization: Replace with broader categories.
 
-        Backend supports:
-          - method='range'      with range_size (bucket width) - FOR NUMERIC VALUES
-          - method='year_only'  - FOR DATES (converts to year only)
-          - method='postal_code' with prefix_length - FOR TEXT (keeps prefix)
-          - method='custom'     with custom_mapping
+        AUTOMATIC TYPE DETECTION:
+          - Text (string/object) → Prefix mode (garde les N premiers caractères)
+          - Numeric (int/float) → Tranches mode (divise en intervalles)
+          - Dates (datetime) → Range d'années mode (extrait l'année)
 
-        Frontend (your UI) currently sends:
-          - mode: 'bins' | 'prefix' | 'year'
-          - bins: int (number of groups)
-          - prefix_len: int
-        This function accepts BOTH formats.
-        
-        IMPORTANT: 
-          - Numerics → ranges (tranches)
-          - Text → prefix
-          - Dates → year only
+        Params:
+          - bins: Nombre de tranches pour les numériques (défaut: 5)
+          - prefix_length: Longueur du préfixe pour le texte (défaut: 3)
+          - range_size: Taille des tranches pour les numériques (optionnel, alternative à bins)
         """
 
-        # --- Compatibility layer: accept frontend params (mode/bins/prefix_len/year) ---
-        method = params.get("method", None)
+        # === DÉTECTION AUTOMATIQUE DU TYPE ===
 
-        if method is None and "mode" in params:
-            mode = params.get("mode")
-
-            if mode == "bins":
-                # We will interpret "bins" as number of groups (bin count)
-                method = "bins"
-            elif mode == "prefix":
-                method = "postal_code"
-                params["prefix_length"] = params.get("prefix_len", params.get("prefix_length", 3))
-            elif mode == "year":
-                method = "year_only"
-            else:
-                method = "range"
-        else:
-            method = method or "range"
-        # --- End compatibility layer ---
-
-        # --- Smart default detection ---
-        if method == "range" and not pd.api.types.is_numeric_dtype(df[column]):
-            # If "range" is requested (or defaulted) but column is NOT numeric, 
-            # we try to detect better methods.
-            
-            # Check for Date
-            if pd.api.types.is_datetime64_any_dtype(df[column]):
-                method = "year_only"
-            # Check for Text (object/string)
-            elif pd.api.types.is_string_dtype(df[column]) or df[column].dtype == "object":
-                # Check if it looks like a date string first
-                try:
-                    # heuristic: try converting sample to date
-                    pd.to_datetime(df[column].dropna().head(10))
-                    method = "year_only"
-                except (ValueError, TypeError):
-                    # It's really text -> Prefix
-                    method = "prefix"
-        # -------------------------------
-
-        # Helper: bins generalization (number of bins)
-        if method == "bins":
-            bins = int(params.get("bins", 5))
-
-            # Convert to numeric for binning; non-numeric stay as-is
-            numeric = pd.to_numeric(df[column], errors="coerce")
-            if numeric.notna().sum() == 0:
-                return df  # nothing numeric to generalize
-
-            # Create bin labels like "low-high"
-            binned = pd.cut(numeric, bins=bins, include_lowest=True, duplicates="drop")
-            df[column] = binned.astype(str).where(numeric.notna(), df[column])
+        # 1. Vérifier si c'est une date (datetime)
+        if pd.api.types.is_datetime64_any_dtype(df[column]):
+            logger.info(f"Colonne '{column}': Type DATE détecté → Mode range d'années")
+            df[column] = pd.to_datetime(df[column], errors="coerce").dt.year
             return df
 
-        if method == "range":
-            # Numeric ranges by width (e.g., 10 -> 0-10, 10-20)
-            range_size = int(params.get("range_size", 10))
-            df[column] = df[column].apply(
-                lambda x: self._generalize_to_range(x, range_size) if pd.notna(x) else x
-            )
+        # 2. Essayer de détecter les dates sous forme de texte
+        if df[column].dtype == "object" or pd.api.types.is_string_dtype(df[column]):
+            # Échantillon pour test de conversion date
+            sample = df[column].dropna().head(20)
+            try:
+                # Tenter conversion en date
+                date_conversion = pd.to_datetime(sample, errors="coerce")
+                # Si au moins 70% des valeurs sont des dates valides
+                if date_conversion.notna().sum() / len(sample) >= 0.7:
+                    logger.info(f"Colonne '{column}': Dates textuelles détectées → Mode range d'années")
+                    df[column] = pd.to_datetime(df[column], errors="coerce").dt.year
+                    return df
+            except (ValueError, TypeError):
+                pass  # Pas une date, continuer
 
-        elif method == "year_only":
-            # Dates: generalize to year only
-            df[column] = pd.to_datetime(df[column], errors="coerce").dt.year
+        # 3. Vérifier si c'est numérique
+        if pd.api.types.is_numeric_dtype(df[column]):
+            logger.info(f"Colonne '{column}': Type NUMÉRIQUE détecté → Mode tranches")
 
-        elif method == "postal_code" or method == "prefix":
-            # Text: generalize to prefix
-            prefix_length = int(params.get("prefix_length", 3))
-            df[column] = df[column].apply(
-                lambda x: self._generalize_text_prefix(x, prefix_length) if pd.notna(x) else x
-            )
+            # Option A: Utiliser bins (nombre de tranches)
+            if "bins" in params or "range_size" not in params:
+                bins = int(params.get("bins", 5))
 
-        elif method == "custom":
-            mapping = params.get("custom_mapping", {})
-            df[column] = df[column].map(lambda x: mapping.get(str(x), x))
+                # Créer les tranches avec labels descriptifs
+                binned = pd.cut(df[column], bins=bins, include_lowest=True, duplicates="drop")
+                df[column] = binned.astype(str)
+                return df
+
+            # Option B: Utiliser range_size (largeur fixe)
+            else:
+                range_size = int(params.get("range_size", 10))
+                df[column] = df[column].apply(
+                    lambda x: self._generalize_to_range(x, range_size) if pd.notna(x) else x
+                )
+                return df
+
+        # 4. Par défaut: Texte → Mode préfixe
+        logger.info(f"Colonne '{column}': Type TEXTE détecté → Mode préfixe")
+        prefix_length = int(params.get("prefix_length", 3))
+        df[column] = df[column].apply(
+            lambda x: self._generalize_text_prefix(x, prefix_length) if pd.notna(x) else x
+        )
 
         return df
 
@@ -532,7 +500,7 @@ class Anonymizer:
             f"noise_magnitude={metadata['noise_magnitude']:.2f}"
         )
 
-        return df
+        return df, metadata
 
     async def _save_anonymized_dataset(
         self,
