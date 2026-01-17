@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str | None = None
     ENABLE_AI_DETECTION: bool = False  # Enable when GROQ_API_KEY is set
     AI_CONFIDENCE_THRESHOLD: float = 70.0  # Use AI for columns with confidence < threshold
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"  # Fast and accurate for classification
+    GROQ_MODEL: str = "llama-3.1-8b-instant"  # Lightweight model for data classification
 
     model_config = SettingsConfigDict(
         env_file=".env",
