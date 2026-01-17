@@ -43,7 +43,7 @@ class AnonymizationTechnique(str, Enum):
     MASKING = "masking"
     GENERALIZATION = "generalization"
     SUPPRESSION = "suppression"
-    PSEUDONYMIZATION = "pseudonymization"
+    
     DIFFERENTIAL_PRIVACY = "differential_privacy"
 
 

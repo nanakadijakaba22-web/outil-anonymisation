@@ -5,8 +5,7 @@ Techniques:
 1. Masking - Partial character replacement (emails, phones)
 2. Generalization - Replace with broader categories (ages, incomes)
 3. Suppression - Complete column removal (NAS, SSN)
-4. Pseudonymization - Consistent fake ID generation (names)
-5. Differential Privacy - Mathematical noise addition for formal guarantees (OPTIONAL)
+4. Differential Privacy - Mathematical noise addition for formal guarantees (OPTIONAL)
 """
 import hashlib
 import logging
@@ -201,11 +200,23 @@ class Anonymizer:
         elif technique == AnonymizationTechnique.SUPPRESSION:
             df = self._suppress_column(df, column, job_id, dataset_id)
 
-        elif technique == AnonymizationTechnique.PSEUDONYMIZATION:
-            df = self._pseudonymize_column(df, column, params)
+    
 
         elif technique == AnonymizationTechnique.DIFFERENTIAL_PRIVACY:
-            df = self._add_differential_privacy(df, column, params)
+          # DP فقط للـ colonnes numériques
+           if column not in df.columns:
+             raise ValueError(f"Colonne introuvable: {column}")
+
+              # Si la colonne est texte -> DP interdit (sinon ça crash)
+             if not pd.api.types.is_numeric_dtype(df[column]):
+               raise ValueError(
+            f"Confidentialité différentielle impossible sur colonne non numérique: {column}"
+             )
+
+             # IMPORTANT: _add_differential_privacy renvoie (df, metadata)
+             df, dp_metadata = self._add_differential_privacy(df, column, params)
+             params["dp_metadata"] = dp_metadata  # optionnel
+
 
         # Get sample after transformations
         if column in df.columns:
@@ -286,42 +297,102 @@ class Anonymizer:
         """
         Generalization: Replace with broader categories.
 
-        Params:
-            method: 'range' | 'year_only' | 'year_month' | 'postal_code' | 'custom'
-            range_size: For numeric ranges (default: 10)
-            prefix_length: For postal code prefix (default: 3)
-            custom_mapping: Dict for custom mappings
+        Backend supports:
+          - method='range'      with range_size (bucket width) - FOR NUMERIC VALUES
+          - method='year_only'  - FOR DATES (converts to year only)
+          - method='postal_code' with prefix_length - FOR TEXT (keeps prefix)
+          - method='custom'     with custom_mapping
+
+        Frontend (your UI) currently sends:
+          - mode: 'bins' | 'prefix' | 'year'
+          - bins: int (number of groups)
+          - prefix_len: int
+        This function accepts BOTH formats.
+        
+        IMPORTANT: 
+          - Numerics → ranges (tranches)
+          - Text → prefix
+          - Dates → year only
         """
-        method = params.get("method", "range")
+
+        # --- Compatibility layer: accept frontend params (mode/bins/prefix_len/year) ---
+        method = params.get("method", None)
+
+        if method is None and "mode" in params:
+            mode = params.get("mode")
+
+            if mode == "bins":
+                # We will interpret "bins" as number of groups (bin count)
+                method = "bins"
+            elif mode == "prefix":
+                method = "postal_code"
+                params["prefix_length"] = params.get("prefix_len", params.get("prefix_length", 3))
+            elif mode == "year":
+                method = "year_only"
+            else:
+                method = "range"
+        else:
+            method = method or "range"
+        # --- End compatibility layer ---
+
+        # --- Smart default detection ---
+        if method == "range" and not pd.api.types.is_numeric_dtype(df[column]):
+            # If "range" is requested (or defaulted) but column is NOT numeric, 
+            # we try to detect better methods.
+            
+            # Check for Date
+            if pd.api.types.is_datetime64_any_dtype(df[column]):
+                method = "year_only"
+            # Check for Text (object/string)
+            elif pd.api.types.is_string_dtype(df[column]) or df[column].dtype == "object":
+                # Check if it looks like a date string first
+                try:
+                    # heuristic: try converting sample to date
+                    pd.to_datetime(df[column].dropna().head(10))
+                    method = "year_only"
+                except (ValueError, TypeError):
+                    # It's really text -> Prefix
+                    method = "prefix"
+        # -------------------------------
+
+        # Helper: bins generalization (number of bins)
+        if method == "bins":
+            bins = int(params.get("bins", 5))
+
+            # Convert to numeric for binning; non-numeric stay as-is
+            numeric = pd.to_numeric(df[column], errors="coerce")
+            if numeric.notna().sum() == 0:
+                return df  # nothing numeric to generalize
+
+            # Create bin labels like "low-high"
+            binned = pd.cut(numeric, bins=bins, include_lowest=True, duplicates="drop")
+            df[column] = binned.astype(str).where(numeric.notna(), df[column])
+            return df
 
         if method == "range":
-            # Numeric ranges (e.g., ages, incomes)
-            range_size = params.get("range_size", 10)
+            # Numeric ranges by width (e.g., 10 -> 0-10, 10-20)
+            range_size = int(params.get("range_size", 10))
             df[column] = df[column].apply(
                 lambda x: self._generalize_to_range(x, range_size) if pd.notna(x) else x
             )
 
         elif method == "year_only":
-            # Dates -> Keep year only (YYYY)
-            df[column] = pd.to_datetime(df[column], errors='coerce').dt.year
+            # Dates: generalize to year only
+            df[column] = pd.to_datetime(df[column], errors="coerce").dt.year
 
-        elif method == "year_month":
-            # Dates -> Keep year and month (YYYY-MM)
-            df[column] = pd.to_datetime(df[column], errors='coerce').dt.strftime('%Y-%m')
-
-        elif method == "postal_code":
-            # Postal code -> prefix + asterisks (e.g., "G1X 3J4" -> "G1X ***")
-            prefix_length = params.get("prefix_length", 3)
+        elif method == "postal_code" or method == "prefix":
+            # Text: generalize to prefix
+            prefix_length = int(params.get("prefix_length", 3))
             df[column] = df[column].apply(
-                lambda x: self._generalize_postal_code(x, prefix_length) if pd.notna(x) else x
+                lambda x: self._generalize_text_prefix(x, prefix_length) if pd.notna(x) else x
             )
 
         elif method == "custom":
-            # Custom mapping provided by user
             mapping = params.get("custom_mapping", {})
             df[column] = df[column].map(lambda x: mapping.get(str(x), x))
 
         return df
+
 
     def _generalize_to_range(self, value: Any, range_size: int) -> str:
         """Convert numeric value to range string."""
@@ -333,31 +404,26 @@ class Anonymizer:
         except (ValueError, TypeError):
             return str(value)
 
-    def _generalize_postal_code(self, value: Any, prefix_length: int) -> str:
+    def _generalize_text_prefix(self, value: Any, prefix_length: int) -> str:
         """
-        Generalize postal code by keeping prefix and replacing rest with asterisks.
+        Generalize text by keeping prefix and replacing rest with asterisks.
         
         Examples:
             "G1X 3J4" -> "G1X ***" (prefix_length=3)
-            "H3B1A1" -> "H3B ***" (prefix_length=3)
-            "K1A 0B1" -> "K1A ***" (prefix_length=3)
+            "Montreal" -> "Mon ***" (prefix_length=3)
         """
         if pd.isna(value):
             return value
         
-        postal_str = str(value).strip()
-        
-        # Remove spaces and dashes for processing
-        postal_clean = postal_str.replace(" ", "").replace("-", "")
+        text_str = str(value).strip()
         
         # Keep prefix and replace rest with asterisks
-        if len(postal_clean) > prefix_length:
-            prefix = postal_clean[:prefix_length]
-            # Use *** for visual consistency
+        if len(text_str) > prefix_length:
+            prefix = text_str[:prefix_length]
             return f"{prefix} ***"
         else:
             # If too short, just return as is
-            return postal_str
+            return text_str
 
     def _suppress_column(
         self,
@@ -413,43 +479,7 @@ class Anonymizer:
         df = df.drop(columns=[column])
         return df
 
-    def _pseudonymize_column(
-        self,
-        df: pd.DataFrame,
-        column: str,
-        params: Dict[str, Any]
-    ) -> pd.DataFrame:
-        """
-        Pseudonymization: Consistent replacement with fake IDs.
-
-        Params:
-            prefix: Prefix for pseudonyms (default: "PERSON_")
-            seed: Random seed for consistency (default: 42)
-        """
-        prefix = params.get("prefix", "PERSON_")
-        seed = params.get("seed", 42)
-
-        def pseudonymize_value(val):
-            if pd.isna(val):
-                return val
-
-            val_str = str(val)
-
-            # Check cache
-            if val_str in self._pseudonym_cache:
-                return self._pseudonym_cache[val_str]
-
-            # Generate deterministic pseudonym using hash
-            hash_input = f"{val_str}_{seed}".encode('utf-8')
-            hash_hex = hashlib.sha256(hash_input).hexdigest()[:6].upper()
-            pseudonym = f"{prefix}{hash_hex}"
-
-            # Cache it
-            self._pseudonym_cache[val_str] = pseudonym
-            return pseudonym
-
-        df[column] = df[column].apply(pseudonymize_value)
-        return df
+    
 
     def _add_differential_privacy(
         self,

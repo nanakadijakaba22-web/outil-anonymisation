@@ -72,7 +72,7 @@ export interface BulkSensitivityUpdate {
 
 export interface AnonymizationConfig {
   column_name: string;
-  technique: 'masking' | 'generalization' | 'suppression' | 'pseudonymization';
+  technique: 'masking' | 'generalization' | 'suppression' | 'differential_privacy';
   params: Record<string, any>;
 }
 

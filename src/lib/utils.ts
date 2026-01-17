@@ -115,6 +115,7 @@ export function formatCategory(category: string | null): string {
 }
 
 // Format technique to French
+
 export function formatTechnique(technique: string): string {
   switch (technique) {
     case 'masking':
@@ -123,12 +124,13 @@ export function formatTechnique(technique: string): string {
       return 'Généralisation';
     case 'suppression':
       return 'Suppression';
-    case 'pseudonymization':
-      return 'Pseudonymisation';
+    case 'differential_privacy':
+      return 'Confidentialité différentielle';
     default:
       return technique;
   }
 }
+
 
 // Calculate percentage
 export function calculatePercentage(value: number, total: number): number {

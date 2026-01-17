@@ -1,6 +1,10 @@
 """
 Test script to verify generalization corrections.
-Tests postal codes, dates, and numeric ranges.
+
+RÈGLES DE GÉNÉRALISATION:
+- Numériques → tranches (ranges)
+- Texte → préfixe (prefix)
+- Dates → année seulement (year only)
 """
 import pandas as pd
 from datetime import datetime
@@ -53,23 +57,20 @@ for code in postal_codes:
     result = generalize_postal_code(code, 3)
     print(f"{code:15} -> {result}")
 
-# Test dates
+# Test dates - ONLY year generalization
 print("\n" + "=" * 60)
-print("TEST 2: Généralisation des dates")
+print("TEST 2: Généralisation des dates (année seulement)")
 print("=" * 60)
 dates = ["2024-05-15", "2023-12-01", "2022-01-30"]
 df_dates = pd.DataFrame({"date": pd.to_datetime(dates)})
 
-# Year only
+# Year only (ONLY method for dates)
 df_dates["year_only"] = df_dates["date"].dt.year
 
-# Year-Month
-df_dates["year_month"] = df_dates["date"].dt.strftime('%Y-%m')
-
-print("\nOriginal        | Year Only | Year-Month")
-print("-" * 60)
+print("\nOriginal        | Year Only")
+print("-" * 40)
 for idx, row in df_dates.iterrows():
-    print(f"{row['date'].strftime('%Y-%m-%d')}    | {row['year_only']}      | {row['year_month']}")
+    print(f"{row['date'].strftime('%Y-%m-%d')}    | {row['year_only']}")
 
 # Test numeric ranges
 print("\n" + "=" * 60)

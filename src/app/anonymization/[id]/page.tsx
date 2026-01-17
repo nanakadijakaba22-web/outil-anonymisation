@@ -12,7 +12,7 @@ import {
 import Stepper from '@/components/Stepper';
 import ProgressBadge from '@/components/ProgressBadge';
 
-type TechniqueType = 'masking' | 'generalization' | 'suppression' | 'pseudonymization';
+type TechniqueType = 'masking' | 'generalization' | 'suppression'  |'differential_privacy';
 
 interface ColumnConfig {
   column_name: string;
@@ -69,17 +69,29 @@ export default function AnonymizationPage() {
                   technique = 'masking';
                   params = { visible_chars: 2 };
                 }
-              } else {
-                technique = 'pseudonymization';
-                params = { prefix: 'ID_' };
+              }  else {
+                   technique = 'differential_privacy';
+                    params = { epsilon: 1.0, mechanism: 'laplace' };
+                  }
+
+              } else if (classification.sensitivity_type === 'quasi_identifier') {
+                    technique = 'generalization';
+
+                     const col = columnName.toLowerCase();
+
+               // Code postal => préfixe
+                if (col.includes('code_postal') || col.includes('postal') || col.includes('zip')) {
+                   params = { mode: 'prefix', prefix_len: 3 };
+                  }
+              // Date => année
+                else if (col.includes('date') || col.includes('ouverture')) {
+                   params = { mode: 'year' };
               }
-            } else if (classification.sensitivity_type === 'quasi_identifier') {
-              technique = 'generalization';
-              params = { bins: 5 };
-            } else if (classification.sensitivity_type === 'sensitive') {
-              technique = 'generalization';
-              params = { bins: 3 };
-            }
+                // Sinon => bins (numérique)
+                else {
+                   params = { mode: 'bins', bins: 5 };
+              }
+              }
 
             initialConfigs[columnName] = {
               column_name: columnName,
@@ -132,9 +144,11 @@ export default function AnonymizationPage() {
       case 'masking':
         return { visible_chars: 2 };
       case 'generalization':
-        return { bins: 5 };
+        return { mode:'bins', bins: 5 };
       case 'suppression':
         return {};
+         case 'differential_privacy':
+        return { epsilon: 1.0, delta:1e-5, mechanism: 'gaussian' };
       default:
         return {};
     }
@@ -275,7 +289,7 @@ export default function AnonymizationPage() {
                     Technique d'anonymisation
                   </label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {(['masking', 'generalization', 'suppression', 'pseudonymization'] as TechniqueType[]).map(
+                    {(['masking', 'generalization', 'suppression', 'differential_privacy'] as TechniqueType[]).map(
                       (tech) => (
                         <button
                           key={tech}
@@ -315,41 +329,123 @@ export default function AnonymizationPage() {
                   </div>
                 )}
 
-                {config.technique === 'generalization' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nombre de groupes (bins)
-                    </label>
-                    <input
-                      type="number"
-                      min="2"
-                      max="10"
-                      value={config.params.bins || 5}
-                      onChange={(e) => updateParam(columnName, 'bins', parseInt(e.target.value))}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <p className="text-sm text-gray-500 mt-1">
-                      Exemple: 75000 → "75000-100000"
-                    </p>
-                  </div>
-                )}
+              {config.technique === 'generalization' && (
+                <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+               Type de généralisation
+              </label>
+              <select
+                 value={config.params.mode ?? 'bins'}
+                onChange={(e) => {
+                const mode = e.target.value;
+                  // reset params selon mode
+                 if (mode === 'bins') updateParam(columnName, 'mode', 'bins');
+                 if (mode === 'prefix') {
+                  updateParam(columnName, 'mode', 'prefix');
+                   updateParam(columnName, 'prefix_len', 3);
+                  }
+                   if (mode === 'year') updateParam(columnName, 'mode', 'year');
+              }}
+        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+      >
+        <option value="bins">Tranches (numérique)</option>
+        <option value="prefix">Préfixe (code postal)</option>
+        <option value="year">Année (date)</option>
+      </select>
+    </div>
 
-                {config.technique === 'pseudonymization' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Préfixe
-                    </label>
-                    <input
-                      type="text"
-                      value={config.params.prefix || 'ANON_'}
-                      onChange={(e) => updateParam(columnName, 'prefix', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <p className="text-sm text-gray-500 mt-1">
-                      Exemple: Tremblay → {config.params.prefix || 'ANON_'}ABC123
-                    </p>
-                  </div>
-                )}
+    {(config.params.mode ?? 'bins') === 'bins' && (
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Nombre de groupes (bins)
+        </label>
+        <input
+          type="number"
+          min="2"
+          max="10"
+          value={config.params.bins || 5}
+          onChange={(e) => updateParam(columnName, 'bins', parseInt(e.target.value))}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        <p className="text-sm text-gray-500 mt-1">
+          Exemple: 75000 → "75000-100000"
+        </p>
+      </div>
+    )}
+
+    {(config.params.mode ?? 'bins') === 'prefix' && (
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Longueur du préfixe
+        </label>
+        <input
+          type="number"
+          min="1"
+          max="6"
+          value={config.params.prefix_len || 3}
+          onChange={(e) => updateParam(columnName, 'prefix_len', parseInt(e.target.value))}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        <p className="text-sm text-gray-500 mt-1">
+          Exemple: G1V 2L9 → G1V***
+        </p>
+      </div>
+    )}
+
+    {(config.params.mode ?? 'bins') === 'year' && (
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <p className="text-sm text-blue-800">
+          Les dates seront généralisées à l’année (ex: 2021-08-22 → 2021).
+        </p>
+      </div>
+    )}
+  </div>
+)}
+
+
+                {config.technique === 'differential_privacy' && (
+  <div className="space-y-3">
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Epsilon (ε)
+      </label>
+      <input
+        type="number"
+        step="0.1"
+        min="0.1"
+        value={config.params.epsilon ?? 1.0}
+        onChange={(e) => updateParam(columnName, 'epsilon', parseFloat(e.target.value))}
+        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      />
+      <p className="text-sm text-gray-500 mt-1">
+        Plus ε est petit, plus c’est privé (mais plus de bruit).
+      </p>
+    </div>
+
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Mécanisme
+      </label>
+      <select
+        value={config.params.mechanism ?? 'laplace'}
+        onChange={(e) => updateParam(columnName, 'mechanism', e.target.value)}
+        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+      >
+        <option value="laplace">Laplace</option>
+        <option value="gaussian">Gaussian</option>
+      </select>
+    </div>
+
+    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+      <p className="text-sm text-yellow-800">
+        <strong>Note :</strong> la confidentialité différentielle s’applique surtout aux colonnes numériques.
+        Pour texte (nom, email), préfère suppression/masquage.
+      </p>
+    </div>
+  </div>
+)}
+
 
                 {config.technique === 'suppression' && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">

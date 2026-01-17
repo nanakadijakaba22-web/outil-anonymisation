@@ -5,6 +5,10 @@ Uses Pydantic Settings for environment variable management.
 from pydantic import PostgresDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+import json
+from typing import Any
+
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -16,7 +20,37 @@ class Settings(BaseSettings):
     DESCRIPTION: str = "Quebec Law 25 Compliant Data Anonymization API"
 
     # CORS Settings
-    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    BACKEND_CORS_ORIGINS: list[str] = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+    
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: Any):
+        """
+        Accepts:
+        - list already (ok)
+        - JSON string: '["http://localhost:3000"]'
+        - comma string: 'http://localhost:3000,http://127.0.0.1:3000'
+        """
+        if v is None:
+            return v
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            s = v.strip()
+            # JSON list
+            if s.startswith("["):
+                try:
+                    return json.loads(s)
+                except Exception:
+                    pass
+            # Comma-separated
+            return [item.strip() for item in s.split(",") if item.strip()]
+        return v
 
     # Database Settings
     POSTGRES_SERVER: str = "localhost"
