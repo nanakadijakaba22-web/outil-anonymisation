@@ -16,7 +16,7 @@ Premier release fonctionnel de l'outil d'anonymisation conforme à la Loi 25 du 
 #### Backend (FastAPI)
 - Infrastructure complète avec Docker et PostgreSQL 15
 - API RESTful avec documentation OpenAPI automatique
-- Upload et ingestion de fichiers CSV (max 100 MB)
+- Upload et ingestion de fichiers CSV (max 1 GB)
 - Détection automatique de données sensibles avec 4 types de classification
 - 4 techniques d'anonymisation professionnelles:
   - Masquage (emails, téléphones, cartes de crédit)

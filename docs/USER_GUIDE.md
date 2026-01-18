@@ -76,7 +76,7 @@ docker-compose up -d
 
 **Contraintes**:
 - Format: CSV uniquement
-- Taille maximale: 100 MB
+- Taille maximale: 1 GB
 - Encodage: UTF-8 recommandé
 
 **Temps estimé**: < 5 secondes
@@ -405,7 +405,7 @@ R: Uniquement CSV pour le moment. Excel/XLSX sera ajouté dans une future versio
 ### Questions techniques
 
 **Q: Quelle est la taille maximale de fichier?**
-R: 100 MB par défaut (configurable dans .env avec MAX_UPLOAD_SIZE).
+R: 1 GB par défaut (configurable dans .env avec MAX_UPLOAD_SIZE).
 
 **Q: Combien de temps prend l'anonymisation?**
 R: ~17 microsecondes par ligne. 5000 lignes = ~88ms.
@@ -434,7 +434,7 @@ R: Oui, il documente les mesures prises conformément à l'article 63.1.
 
 **Q: L'upload échoue**
 R: Vérifiez:
-- Taille < 100 MB
+- Taille < 1 GB
 - Format CSV (pas Excel)
 - Encodage UTF-8
 - Pas de caractères spéciaux dans le nom

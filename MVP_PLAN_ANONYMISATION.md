@@ -105,7 +105,7 @@ docker-compose ps
 ```
 Crée un service d'upload et parsing de fichiers CSV avec :
 1. Endpoint POST /api/v1/upload pour recevoir un fichier CSV
-2. Validation du format (taille max 100MB, encodage UTF-8)
+2. Validation du format (taille max 1GB, encodage UTF-8)
 3. Stockage temporaire du fichier
 4. Parsing avec pandas et détection automatique des types de colonnes
 5. Sauvegarde des métadonnées en base de données

@@ -127,7 +127,7 @@ open http://localhost:8000/docs
 
 ```bash
 # Datasets
-POST   /api/v1/datasets/upload           # Upload CSV (max 100MB)
+POST   /api/v1/datasets/upload           # Upload CSV (max 1GB)
 GET    /api/v1/datasets/{id}             # Métadonnées
 GET    /api/v1/datasets/{id}/preview     # Aperçu
 DELETE /api/v1/datasets/{id}             # Suppression
@@ -479,7 +479,7 @@ POSTGRES_SERVER=db
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=annoy_db
-MAX_UPLOAD_SIZE=104857600  # 100MB
+MAX_UPLOAD_SIZE=1073741824  # 1GB
 ```
 
 ---

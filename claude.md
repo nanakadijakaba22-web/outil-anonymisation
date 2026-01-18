@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Annoy - Guide de référence Claude
 
 > Outil d'anonymisation de données conforme à la Loi 25 du Québec
@@ -7,24 +11,26 @@
 **Annoy** est un outil professionnel d'anonymisation de données personnelles pour la conformité à la **Loi 25 du Québec**. Application full-stack production-ready qui détecte automatiquement les données sensibles, applique des techniques d'anonymisation professionnelles, et évalue la conformité selon les critères de la loi.
 
 **Status**: ✅ MVP 100% complet (v0.1.0-beta)
-**Branche**: `v2` (main branch)
+**Branche de travail actuelle**: `v4`
+**Branche historique**: `v2` (ancienne branche principale)
 
 ### Stack technique
 
-| Composant | Technologie | Version |
-|-----------|-------------|---------|
-| **Backend** | FastAPI | 0.109+ |
-| **Frontend** | Next.js | 16.1 |
-| **Language (Backend)** | Python | 3.11+ |
-| **Language (Frontend)** | TypeScript | 5 |
-| **UI Framework** | React | 19 |
-| **Database** | PostgreSQL | 15 |
-| **ORM** | SQLAlchemy | 2.0 |
-| **Validation** | Pydantic | 2.6 |
-| **Styling** | Tailwind CSS | v4 |
-| **PDF Generation** | ReportLab | 4.0 |
-| **Containerization** | Docker | Latest |
-| **Reverse Proxy** | Nginx | Alpine |
+| Composant               | Technologie  | Version |
+| ----------------------- | ------------ | ------- |
+| **Backend**             | FastAPI      | 0.109+  |
+| **Frontend**            | Next.js      | 16.1    |
+| **Language (Backend)**  | Python       | 3.11+   |
+| **Language (Frontend)** | TypeScript   | 5       |
+| **UI Framework**        | React        | 19      |
+| **Database**            | PostgreSQL   | 15      |
+| **ORM**                 | SQLAlchemy   | 2.0     |
+| **Validation**          | Pydantic     | 2.6     |
+| **Styling**             | Tailwind CSS | v4      |
+| **PDF Generation**      | ReportLab    | 4.0     |
+| **AI/ML**               | Groq         | 0.13+   |
+| **Containerization**    | Docker       | Latest  |
+| **Reverse Proxy**       | Nginx        | Alpine  |
 
 ---
 
@@ -53,6 +59,7 @@
 ```
 
 **Workflow principal**:
+
 ```
 Upload CSV → Detection → Anonymization → Risk Assessment → Export (CSV + PDF)
 ```
@@ -125,6 +132,7 @@ annoy/
 ### Points d'entrée
 
 **Fichier principal**: `backend/app/main.py`
+
 ```python
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -162,12 +170,14 @@ app.include_router(api_router, prefix="/api/v1")
 ### Services principaux
 
 #### 1. DataIngestionService (`data_ingestion.py`)
+
 - Upload et parsing de fichiers CSV
-- Validation (taille max 100MB, format CSV)
+- Validation (taille max 1GB, format CSV)
 - Extraction métadonnées avec Pandas
 - Détection encodage automatique
 
 #### 2. SensitiveDataDetector (`detector.py`)
+
 - **Détection multi-couches**:
   - Analyse du nom de colonne (heuristiques)
   - Pattern matching regex (NAS, email, téléphone, code postal)
@@ -180,6 +190,7 @@ app.include_router(api_router, prefix="/api/v1")
 - **Score de confiance**: 0-100%
 
 **Patterns regex clés**:
+
 ```python
 PATTERNS = {
     "NAS": r"^\d{3}[-\s]?\d{3}[-\s]?\d{3}$",
@@ -190,32 +201,38 @@ PATTERNS = {
 ```
 
 #### 3. Anonymizer (`anonymizer.py`)
+
 **4 techniques d'anonymisation**:
 
 a. **Masking** (Masquage)
-   - Usage: Emails, téléphones, cartes de crédit
-   - Exemple: `jean@test.com` → `je**@te**.com`
-   - Paramètre: `visible_chars` (défaut: 2)
+
+- Usage: Emails, téléphones, cartes de crédit
+- Exemple: `jean@test.com` → `je**@te**.com`
+- Paramètre: `visible_chars` (défaut: 2)
 
 b. **Generalization** (Généralisation)
-   - Usage: Âges, revenus, codes postaux
-   - Exemple: `75000` → `"75000-100000"`
-   - Paramètre: `bins` (nombre de tranches, défaut: 5)
+
+- Usage: Âges, revenus, codes postaux
+- Exemple: `75000` → `"75000-100000"`
+- Paramètre: `bins` (nombre de tranches, défaut: 5)
 
 c. **Suppression**
-   - Usage: NAS, données ultra-sensibles
-   - Résultat: Colonne complètement retirée
-   - Aucun paramètre
+
+- Usage: NAS, données ultra-sensibles
+- Résultat: Colonne complètement retirée
+- Aucun paramètre
 
 d. **Pseudonymization** (Pseudonymisation)
-   - Usage: Noms, prénoms
-   - Exemple: `Tremblay` → `PERSON_66D67C`
-   - Paramètre: `prefix` (défaut: "ANON_")
-   - Algorithme: SHA-256 hash + seed pour cohérence
+
+- Usage: Noms, prénoms
+- Exemple: `Tremblay` → `PERSON_66D67C`
+- Paramètre: `prefix` (défaut: "ANON\_")
+- Algorithme: SHA-256 hash + seed pour cohérence
 
 **Performance**: ~17.6 µs par ligne (88ms pour 5000 lignes!)
 
 #### 4. RiskEvaluator (`risk_evaluator.py`)
+
 **Évaluation selon 3 critères de la Loi 25**:
 
 1. **Individualisation** (40% du score)
@@ -234,6 +251,7 @@ d. **Pseudonymization** (Pseudonymisation)
    - Seuil élevé: > 25%
 
 **Score global**:
+
 ```
 Overall = (Individualisation × 0.40) + (Corrélation × 0.35) + (Inférence × 0.25)
 ```
@@ -241,6 +259,7 @@ Overall = (Individualisation × 0.40) + (Corrélation × 0.35) + (Inférence × 
 **Seuil de conformité Loi 25**: Score < 20% = ✅ CONFORME
 
 #### 5. PDFReportGenerator (`report_generator.py`)
+
 - Génération de rapports PDF avec ReportLab
 - 3 pages minimum:
   - Page titre avec statut conformité
@@ -253,26 +272,32 @@ Overall = (Individualisation × 0.40) + (Corrélation × 0.35) + (Inférence × 
 **Base URL**: `/api/v1`
 
 **Datasets**:
+
 - `POST /datasets/upload` - Upload CSV
 - `GET /datasets/{id}` - Métadonnées dataset
 - `GET /datasets/{id}/preview?n_rows=10` - Aperçu données
 - `DELETE /datasets/{id}` - Supprimer dataset
 
 **Detection**:
+
 - `POST /datasets/{id}/detect` - Détecter données sensibles
 
 **Anonymization**:
+
 - `POST /datasets/{id}/anonymize` - Appliquer anonymisation
   - Body: `[{"column_name": "nom", "technique": "pseudonymization", "params": {...}}]`
 - `GET /datasets/{id}/download` - Télécharger CSV anonymisé
 
 **Risk Assessment**:
+
 - `GET /datasets/{id}/risk-assessment` - Évaluer conformité Loi 25
 
 **Reports**:
+
 - `GET /datasets/{id}/report` - Générer rapport PDF
 
 **Health**:
+
 - `GET /health` - Health check
 
 **Documentation interactive**: `http://localhost:8000/docs` (FastAPI auto-generated)
@@ -288,7 +313,7 @@ Overall = (Individualisation × 0.40) + (Corrélation × 0.35) + (Inférence × 
 1. **`/`** (Home - Upload)
    - Fichier: `src/app/page.tsx`
    - Drag & drop CSV upload
-   - Validation: CSV only, max 100MB
+   - Validation: CSV only, max 1GB
    - Redirection automatique vers `/detection/[id]`
 
 2. **`/detection/[id]`** (Résultats détection)
@@ -317,7 +342,7 @@ Overall = (Individualisation × 0.40) + (Corrélation × 0.35) + (Inférence × 
 Client TypeScript type-safe:
 
 ```typescript
-import { api } from '@/lib/api';
+import { api } from "@/lib/api";
 
 // Upload
 const dataset = await api.uploadDataset(file);
@@ -327,7 +352,11 @@ const report = await api.detectSensitiveData(datasetId);
 
 // Anonymization
 const config = [
-  { column_name: "nom", technique: "pseudonymization", params: { prefix: "PERSON_" } }
+  {
+    column_name: "nom",
+    technique: "pseudonymization",
+    params: { prefix: "PERSON_" },
+  },
 ];
 const response = await api.anonymizeDataset(datasetId, config);
 
@@ -391,6 +420,7 @@ risk_assessments
 ### Migrations
 
 **Alembic** pour versioning du schéma:
+
 ```bash
 # Créer migration
 alembic revision -m "description"
@@ -408,17 +438,17 @@ alembic downgrade -1
 
 ### Naming
 
-| Contexte | Convention | Exemple |
-|----------|-----------|---------|
-| **Backend files** | snake_case | `data_ingestion.py` |
-| **Backend functions** | snake_case | `analyze_dataset()` |
-| **Backend classes** | PascalCase | `SensitiveDataDetector` |
-| **DB tables** | snake_case | `dataset_columns` |
-| **DB columns** | snake_case | `sensitivity_type` |
-| **Frontend files** | PascalCase | `page.tsx` |
-| **Frontend components** | PascalCase | `UploadPage` |
-| **Frontend functions** | camelCase | `handleUpload()` |
-| **Frontend types** | PascalCase | `DatasetResponse` |
+| Contexte                | Convention | Exemple                 |
+| ----------------------- | ---------- | ----------------------- |
+| **Backend files**       | snake_case | `data_ingestion.py`     |
+| **Backend functions**   | snake_case | `analyze_dataset()`     |
+| **Backend classes**     | PascalCase | `SensitiveDataDetector` |
+| **DB tables**           | snake_case | `dataset_columns`       |
+| **DB columns**          | snake_case | `sensitivity_type`      |
+| **Frontend files**      | PascalCase | `page.tsx`              |
+| **Frontend components** | PascalCase | `UploadPage`            |
+| **Frontend functions**  | camelCase  | `handleUpload()`        |
+| **Frontend types**      | PascalCase | `DatasetResponse`       |
 
 ### API Patterns
 
@@ -432,6 +462,7 @@ alembic downgrade -1
 ### Code Style
 
 **Backend (Python)**:
+
 - Formatter: **Black** (line length: 100)
 - Linter: **Ruff**
 - Type hints: Encouraged mais pas obligatoire
@@ -439,6 +470,7 @@ alembic downgrade -1
 - Async/await: Utilisé pour I/O operations
 
 **Frontend (TypeScript)**:
+
 - Linter: **ESLint** (config Next.js)
 - Formatter: Built-in
 - Types: Strict mode (`tsconfig.json`)
@@ -509,14 +541,24 @@ npm run lint
 ### Tests
 
 ```bash
-# Tests E2E backend
+# Tests E2E backend (workflow complet)
 docker-compose exec backend poetry run pytest tests/test_e2e_workflow.py -v -s
 
 # Avec coverage
 docker-compose exec backend poetry run pytest --cov=app tests/
 
-# Test spécifique
+# Test spécifique d'une classe
 docker-compose exec backend poetry run pytest tests/test_e2e_workflow.py::TestE2EWorkflow::test_complete_workflow -v
+
+# Tester un service spécifique sans Docker
+cd backend
+poetry run pytest tests/test_generalization.py -v
+
+# Tester avec output détaillé
+poetry run pytest tests/test_generalization_fix.py -v -s
+
+# Exécuter tous les tests
+docker-compose exec backend poetry run pytest tests/ -v
 ```
 
 ### Database
@@ -539,6 +581,7 @@ docker-compose exec -T db psql -U postgres annoy_db < backup.sql
 ### Variables d'environnement
 
 **Fichiers**:
+
 - `.env.example` - Template développement
 - `.env.production.example` - Template production
 - `.env.local` - Local overrides (gitignored)
@@ -559,7 +602,7 @@ PROJECT_NAME=Annoy - Data Anonymization Tool
 BACKEND_CORS_ORIGINS=http://localhost:3000
 
 # Upload
-MAX_UPLOAD_SIZE=104857600       # 100 MB
+MAX_UPLOAD_SIZE=1073741824      # 1 GB
 UPLOAD_DIR=./uploads
 
 # Anonymization
@@ -572,6 +615,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 ### Configuration FastAPI
 
 **Fichier**: `backend/app/core/config.py`
+
 ```python
 from pydantic_settings import BaseSettings
 
@@ -597,6 +641,7 @@ class Settings(BaseSettings):
 **Framework**: pytest + pytest-asyncio + httpx
 
 **Ce qui est testé**:
+
 1. Upload CSV (5000 lignes)
 2. Détection données sensibles
 3. Évaluation risque (avant)
@@ -607,6 +652,7 @@ class Settings(BaseSettings):
 8. Génération PDF
 
 **Exemple d'exécution**:
+
 ```bash
 poetry run pytest tests/test_e2e_workflow.py -v -s
 
@@ -620,6 +666,7 @@ poetry run pytest tests/test_e2e_workflow.py -v -s
 ### Fixtures
 
 **Fichier de test**: `backend/tests/fixtures/test_data.csv`
+
 - 10 lignes × 13 colonnes
 - Données bancaires fictives
 - Contient tous les types de sensibilité
@@ -664,13 +711,14 @@ curl http://localhost/health
 ```yaml
 # docker-compose.prod.yml
 services:
-  db:            # PostgreSQL 15 avec volumes persistants
-  backend:       # FastAPI avec 4 workers uvicorn
-  frontend:      # Next.js standalone build
-  nginx:         # Reverse proxy avec SSL/rate limiting
+  db: # PostgreSQL 15 avec volumes persistants
+  backend: # FastAPI avec 4 workers uvicorn
+  frontend: # Next.js standalone build
+  nginx: # Reverse proxy avec SSL/rate limiting
 ```
 
 **Nginx features**:
+
 - Rate limiting: 10 req/s (général), 5 req/min (uploads)
 - Gzip compression
 - Security headers (X-Frame-Options, CSP, etc.)
@@ -681,15 +729,32 @@ services:
 
 ## Points d'attention spécifiques
 
+### Détection automatique des types pour généralisation
+
+Le système inclut une fonctionnalité avancée de **détection automatique des types de données** pour optimiser la généralisation:
+
+- **Types numériques**: Détection automatique (int, float) pour généralisation en bins
+- **Types catégoriels**: Détection de colonnes à faible cardinalité
+- **Types temporels**: Détection de dates pour généralisation temporelle
+- **Heuristiques intelligentes**: Analyse du contenu pour recommander le nombre de bins optimal
+
+**Fichiers clés**:
+
+- `backend/app/services/anonymizer.py` - Logique de généralisation avec auto-détection
+- `backend/test_generalization.py` - Tests de généralisation de base
+- `backend/test_generalization_fix.py` - Tests avancés avec auto-détection
+
 ### Loi 25 du Québec
 
 **Articles implémentés**:
+
 - **Article 3.3**: Évaluation des facteurs de risque
 - **Article 3.5**: Anonymisation et désidentification
 - **Article 3.6**: Mesures de protection appropriées
 - **Article 63.1**: Documentation des mesures
 
 **3 critères de risque** (formule officielle):
+
 ```
 Overall Score = (Individualisation × 40%) + (Corrélation × 35%) + (Inférence × 25%)
 
@@ -699,6 +764,7 @@ Conformité: Score < 20% = CONFORME ✅
 ### Performance
 
 **Benchmarks** (dataset de 5000 lignes × 15 colonnes):
+
 - Upload: < 1s
 - Détection: < 1s
 - **Anonymisation: 88ms** (17.6 µs/ligne)
@@ -709,16 +775,18 @@ Conformité: Score < 20% = CONFORME ✅
 ### Sécurité
 
 **Mesures implémentées**:
+
 - ✅ Rate limiting (Nginx)
 - ✅ CORS whitelist
 - ✅ Input validation (Pydantic v2)
 - ✅ SQL injection protection (SQLAlchemy ORM)
 - ✅ File type validation
-- ✅ Size limits (100 MB)
+- ✅ Size limits (1 GB)
 - ✅ Containers non-root
 - ✅ Security headers
 
 **Production checklist**:
+
 - [ ] Changer `POSTGRES_PASSWORD`
 - [ ] Générer nouveau `DEFAULT_PSEUDONYM_SEED`
 - [ ] Configurer `BACKEND_CORS_ORIGINS` avec domaine réel
@@ -733,8 +801,8 @@ Conformité: Score < 20% = CONFORME ✅
 ### Créer une nouvelle feature
 
 ```bash
-# 1. Créer branche depuis v2
-git checkout v2
+# 1. Créer branche depuis v4
+git checkout v4
 git pull
 git checkout -b feature/ma-nouvelle-feature
 
@@ -768,6 +836,7 @@ git push origin feature/ma-nouvelle-feature
 ```
 
 **Types**:
+
 - `feat`: Nouvelle fonctionnalité
 - `fix`: Correction de bug
 - `docs`: Documentation
@@ -777,6 +846,7 @@ git push origin feature/ma-nouvelle-feature
 - `perf`: Amélioration performance
 
 **Exemples**:
+
 ```
 feat: add Excel file support
 fix: correct NAS detection regex
@@ -790,22 +860,24 @@ chore: upgrade dependencies
 
 ### Fichiers de documentation
 
-| Fichier | Contenu | Pages |
-|---------|---------|-------|
-| **README.md** | Documentation principale (features, installation, API, exemples) | 500+ lignes |
-| **docs/USER_GUIDE.md** | Guide utilisateur complet (interface, techniques, FAQ) | 40 pages |
-| **docs/TECHNICAL.md** | Architecture détaillée, algorithmes, implémentation | 30+ pages |
-| **CHANGELOG.md** | Historique des versions et changements | - |
-| **MVP_PLAN_ANONYMISATION.md** | Plan MVP original et scope | - |
+| Fichier                       | Contenu                                                          | Pages       |
+| ----------------------------- | ---------------------------------------------------------------- | ----------- |
+| **README.md**                 | Documentation principale (features, installation, API, exemples) | 500+ lignes |
+| **docs/USER_GUIDE.md**        | Guide utilisateur complet (interface, techniques, FAQ)           | 40 pages    |
+| **docs/TECHNICAL.md**         | Architecture détaillée, algorithmes, implémentation              | 30+ pages   |
+| **CHANGELOG.md**              | Historique des versions et changements                           | -           |
+| **MVP_PLAN_ANONYMISATION.md** | Plan MVP original et scope                                       | -           |
 
 ### Liens utiles
 
 **API Documentation**:
+
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 - OpenAPI JSON: `http://localhost:8000/openapi.json`
 
 **Technologies**:
+
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [Next.js](https://nextjs.org/docs)
 - [SQLAlchemy 2.0](https://docs.sqlalchemy.org/en/20/)
@@ -814,6 +886,7 @@ chore: upgrade dependencies
 - [Tailwind CSS v4](https://tailwindcss.com/docs)
 
 **Loi 25**:
+
 - [Texte complet de la Loi 25](https://www.legisquebec.gouv.qc.ca/)
 - [Commission d'accès à l'information](https://www.cai.gouv.qc.ca/)
 
@@ -824,6 +897,7 @@ chore: upgrade dependencies
 ### Problèmes fréquents
 
 **1. Backend ne démarre pas**
+
 ```bash
 # Vérifier logs
 docker-compose logs backend
@@ -833,6 +907,7 @@ docker-compose exec backend poetry run alembic upgrade head
 ```
 
 **2. Frontend ne compile pas**
+
 ```bash
 # Nettoyer et réinstaller
 rm -rf node_modules .next
@@ -841,6 +916,7 @@ npm run dev
 ```
 
 **3. Migrations ne s'appliquent pas**
+
 ```bash
 # Reset DB (dev only!)
 docker-compose down -v
@@ -849,6 +925,7 @@ docker-compose exec backend poetry run alembic upgrade head
 ```
 
 **4. Tests échouent**
+
 ```bash
 # S'assurer que les services tournent
 docker-compose up -d
@@ -859,6 +936,7 @@ docker-compose exec backend poetry run pytest tests/ -v
 ```
 
 **5. Upload échoue (file too large)**
+
 - Vérifier `MAX_UPLOAD_SIZE` dans `.env`
 - Nginx limite: `client_max_body_size` dans `nginx.conf`
 
@@ -910,6 +988,7 @@ docker system prune -a
 ## Statistiques du projet
 
 **Code**:
+
 - Backend: ~8,000 lignes Python
 - Frontend: ~2,500 lignes TypeScript
 - Tests: ~300 lignes
@@ -917,11 +996,13 @@ docker system prune -a
 - **Total**: ~12,800 lignes
 
 **Fichiers**:
+
 - ~50+ fichiers de code
 - 5 fichiers de documentation
 - 24 commits professionnels
 
 **Features**:
+
 - ✅ 4 pages web interactives
 - ✅ 5 modèles de base de données
 - ✅ 5 services métier
@@ -932,6 +1013,7 @@ docker system prune -a
 - ✅ Configuration production
 
 **Performance validée**:
+
 - ✅ 5000 clients en < 3 secondes
 - ✅ 17.6 µs par ligne d'anonymisation
 - ✅ 0.0% risque après anonymisation
@@ -948,9 +1030,52 @@ docker system prune -a
 ---
 
 **Version**: 0.1.0-beta
-**Dernière mise à jour**: 2025-12-31
+**Dernière mise à jour**: 2026-01-18
 **Status**: ✅ Production-ready
 
 ---
 
-*Ce fichier est destiné à aider Claude à mieux comprendre et naviguer dans le projet Annoy. Il doit être mis à jour lors de changements majeurs d'architecture ou de conventions.*
+## Notes importantes pour le développement
+
+### Points critiques
+
+1. **Branches Git**: La branche active est `v4`. Les anciennes documentations peuvent référencer `v2`.
+
+2. **Tests de généralisation**: Des fichiers de test spécifiques existent à la racine du backend (`test_generalization.py`, `test_generalization_fix.py`) pour valider la détection automatique des types.
+
+3. **Variables d'environnement**:
+   - Toujours copier `.env.example` vers `.env` en développement
+   - Les services Docker doivent pointer vers `POSTGRES_SERVER=db`
+   - En local sans Docker, utiliser `POSTGRES_SERVER=localhost`
+
+4. **Migrations Alembic**:
+   - TOUJOURS exécuter `alembic upgrade head` après un `docker-compose up` initial
+   - En cas de problème de migration, vérifier les logs avec `docker-compose logs backend`
+
+5. **Hot reload**:
+   - Backend: Uvicorn avec `--reload` pour développement local
+   - Frontend: Next.js dev server se recharge automatiquement
+   - Docker: Rebuild avec `docker-compose up -d --build` après modification de dépendances
+
+6. **Ordre de démarrage**:
+
+   ```bash
+   # L'ordre est important!
+   docker-compose up -d db          # 1. Base de données d'abord
+   sleep 5                           # 2. Attendre que PostgreSQL soit prêt
+   docker-compose up -d backend      # 3. Backend
+   docker-compose up -d frontend     # 4. Frontend
+   ```
+
+7. **Debugging**:
+   - Backend: Logs avec `docker-compose logs -f backend`
+   - Frontend: Logs avec `docker-compose logs -f frontend`
+   - DB: Accès direct avec `docker-compose exec db psql -U postgres -d annoy_db`
+
+8. **Groq Integration**: Le projet utilise Groq (0.13+) pour des fonctionnalités ML/AI futures. Actuellement non utilisé dans le workflow principal.
+
+\*Important: I don't want you to write any code yourself. Your role is to coordinate the efforts between Coding Agents anc Code Review Agents. Have a look at this implementation plan, and I want yo to create different tracks.h track, kick off a coding agent to implement the changes for that track. You need to use the Coder agent for this. Once the coding agent completes its work, you need to hand over the solution to the code review agent and then let the code review agent provide feedback back to the coder agent. The cycle should continue until all changes have been fully implemented. Again, I do not want you to implement anything yourself. You need to keep your context window as lean as possible. Coordinate all the different efforts between the tracks, the coder agents, and code review agents.
+
+---
+
+_Ce fichier est destiné à aider Claude à mieux comprendre et naviguer dans le projet Annoy. Il doit être mis à jour lors de changements majeurs d'architecture ou de conventions._

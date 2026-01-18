@@ -731,7 +731,7 @@ CREATE INDEX idx_risk_compliant ON risk_assessments(is_loi25_compliant);
 Upload un fichier CSV.
 
 **Request**: `multipart/form-data`
-- `file`: CSV file (max 100MB)
+- `file`: CSV file (max 1GB)
 
 **Response**: `201 Created`
 ```json
@@ -864,7 +864,7 @@ Test avec 5000 lignes × 15 colonnes (779 KB):
 
 1. **Validation des entrées**:
    - Pydantic v2 pour validation stricte
-   - Taille maximale de fichier (100 MB)
+   - Taille maximale de fichier (1 GB)
    - Type MIME vérifié
 
 2. **Injection SQL**:
