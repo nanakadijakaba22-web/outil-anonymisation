@@ -36,7 +36,7 @@ async def upload_dataset(
     """
     Upload a CSV file for anonymization.
 
-    - **file**: CSV file (max 100MB)
+    - **file**: CSV file (max 1GB)
 
     Returns dataset metadata including:
     - Dataset ID

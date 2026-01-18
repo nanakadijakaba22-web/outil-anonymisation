@@ -95,7 +95,7 @@ class DataIngestionService:
                     file_path.unlink()  # Delete partial file
                     raise HTTPException(
                         status_code=413,
-                        detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE / (1024*1024):.0f}MB"
+                        detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE / (1024*1024*1024):.1f}GB"
                     )
                 f.write(chunk)
 
