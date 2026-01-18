@@ -4,6 +4,10 @@ Generates professional PDF reports with risk assessment and anonymization detail
 """
 
 from datetime import datetime, timezone
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 from typing import Optional
 from io import BytesIO
 
@@ -206,9 +210,10 @@ class PDFReportGenerator:
         elements.append(Spacer(1, 0.8 * inch))
 
         # Dataset information
+        tz = ZoneInfo("America/Toronto")
         info_data = [
             ["Fichier:", dataset.filename],
-            ["Date d'analyse:", datetime.now(timezone.utc).strftime("%d/%m/%Y à %H:%M")],
+            ["Date d'analyse:", datetime.now(tz).strftime("%d/%m/%Y à %H:%M")],
             ["Nombre de lignes:", str(dataset.row_count)],
             ["Nombre de colonnes:", str(dataset.column_count)],
             [
@@ -239,16 +244,18 @@ class PDFReportGenerator:
     ) -> list:
         """Build executive summary section."""
         elements = []
+        tz = ZoneInfo("America/Toronto")
 
         elements.append(Paragraph("Sommaire Exécutif", self.styles["CustomSubtitle"]))
 
         summary_text = f"""
         Ce rapport présente l'analyse de conformité du fichier <b>{dataset.filename}</b>
         selon les exigences de la Loi 25 du Québec sur la protection des renseignements
-        personnels. L'évaluation a été réalisée le {datetime.now(timezone.utc).strftime("%d/%m/%Y")}.
+        personnels. L'évaluation a été réalisée le {datetime.now(tz).strftime("%d/%m/%Y")}.
         """
 
         if risk_assessment.is_loi25_compliant:
+
             summary_text += """<br/><br/>
             <b>Résultat:</b> Le dataset est <font color="#10b981"><b>CONFORME</b></font>
             aux exigences de la Loi 25. Le risque global de réidentification est faible
