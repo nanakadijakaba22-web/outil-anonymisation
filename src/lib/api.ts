@@ -3,7 +3,7 @@
  * Type-safe client for all backend endpoints
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const API_V1 = `${API_BASE_URL}/api/v1`;
 
 // Types
@@ -41,11 +41,16 @@ export interface DatasetPreview {
 
 export interface ColumnClassification {
   column_name: string;
-  sensitivity_type: 'direct_identifier' | 'quasi_identifier' | 'sensitive' | 'non_sensitive';
-  category: 'personal' | 'financial' | 'health' | 'insurance' | 'other';
+  sensitivity_type:
+    | "direct_identifier"
+    | "quasi_identifier"
+    | "sensitive"
+    | "non_sensitive";
+  category: "personal" | "financial" | "health" | "insurance" | "other";
   confidence: number;
   justification: string;
   risk_score?: number; // Optionnel - Risque de ré-identification (0-100)
+  suggested_config?: AnonymizationConfig;
 }
 
 export interface DetectionReport {
@@ -61,8 +66,12 @@ export interface DetectionReport {
 }
 
 export interface ColumnSensitivityUpdate {
-  sensitivity_type: 'direct_identifier' | 'quasi_identifier' | 'sensitive' | 'non_sensitive';
-  category?: 'personal' | 'financial' | 'health' | 'insurance' | 'other';
+  sensitivity_type:
+    | "direct_identifier"
+    | "quasi_identifier"
+    | "sensitive"
+    | "non_sensitive";
+  category?: "personal" | "financial" | "health" | "insurance" | "other";
   justification?: string;
 }
 
@@ -72,7 +81,11 @@ export interface BulkSensitivityUpdate {
 
 export interface AnonymizationConfig {
   column_name: string;
-  technique: 'masking' | 'generalization' | 'suppression' | 'differential_privacy';
+  technique:
+    | "masking"
+    | "generalization"
+    | "suppression"
+    | "differential_privacy";
   params: Record<string, any>;
 }
 
@@ -92,12 +105,12 @@ export interface AnonymizationResponse {
   anonymized_dataset_id: string;
   transformations: TransformationDetail[];
   processing_time_seconds: number;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: "pending" | "processing" | "completed" | "failed";
 }
 
 export interface RiskScore {
   score: number;
-  level: 'faible' | 'moyen' | 'élevé';
+  level: "faible" | "moyen" | "élevé";
   justification: string;
   affected_columns: string[];
 }
@@ -109,7 +122,7 @@ export interface RiskAssessment {
   correlation: RiskScore;
   inference: RiskScore;
   overall_score: number;
-  overall_level: 'faible' | 'moyen' | 'élevé';
+  overall_level: "faible" | "moyen" | "élevé";
   is_loi25_compliant: boolean;
   recommendations: string[];
   details: any | null;
@@ -126,8 +139,12 @@ class AnnoyAPIClient {
   // Helper method for handling responses
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-      throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
+      const error = await response
+        .json()
+        .catch(() => ({ detail: "Unknown error" }));
+      throw new Error(
+        error.detail || `HTTP ${response.status}: ${response.statusText}`,
+      );
     }
     return response.json();
   }
@@ -135,10 +152,10 @@ class AnnoyAPIClient {
   // Datasets endpoints
   async uploadDataset(file: File): Promise<Dataset> {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append("file", file);
 
     const response = await fetch(`${this.baseUrl}/datasets/upload`, {
-      method: 'POST',
+      method: "POST",
       body: formData,
     });
 
@@ -153,26 +170,29 @@ class AnnoyAPIClient {
   async getDatasetPreview(
     datasetId: string,
     nRows: number = 10,
-    options?: { signal?: AbortSignal }
+    options?: { signal?: AbortSignal },
   ): Promise<DatasetPreview> {
     const response = await fetch(
       `${this.baseUrl}/datasets/${datasetId}/preview?n_rows=${nRows}`,
-      options
+      options,
     );
     return this.handleResponse<DatasetPreview>(response);
   }
 
   async deleteDataset(datasetId: string): Promise<void> {
     await fetch(`${this.baseUrl}/datasets/${datasetId}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
   // Detection endpoint
   async detectSensitiveData(datasetId: string): Promise<DetectionReport> {
-    const response = await fetch(`${this.baseUrl}/datasets/${datasetId}/detect`, {
-      method: 'POST',
-    });
+    const response = await fetch(
+      `${this.baseUrl}/datasets/${datasetId}/detect`,
+      {
+        method: "POST",
+      },
+    );
     return this.handleResponse<DetectionReport>(response);
   }
 
@@ -180,34 +200,34 @@ class AnnoyAPIClient {
   async updateColumnSensitivity(
     datasetId: string,
     columnName: string,
-    update: ColumnSensitivityUpdate
+    update: ColumnSensitivityUpdate,
   ): Promise<ColumnInfo> {
     const response = await fetch(
       `${this.baseUrl}/datasets/${datasetId}/columns/${encodeURIComponent(columnName)}/sensitivity`,
       {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(update),
-      }
+      },
     );
     return this.handleResponse<ColumnInfo>(response);
   }
 
   async updateColumnsSensitivityBulk(
     datasetId: string,
-    bulkUpdate: BulkSensitivityUpdate
+    bulkUpdate: BulkSensitivityUpdate,
   ): Promise<ColumnInfo[]> {
     const response = await fetch(
       `${this.baseUrl}/datasets/${datasetId}/columns/sensitivity/bulk`,
       {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(bulkUpdate),
-      }
+      },
     );
     return this.handleResponse<ColumnInfo[]>(response);
   }
@@ -215,15 +235,18 @@ class AnnoyAPIClient {
   // Anonymization endpoints
   async anonymizeDataset(
     datasetId: string,
-    config: AnonymizationConfig[]
+    config: AnonymizationConfig[],
   ): Promise<AnonymizationResponse> {
-    const response = await fetch(`${this.baseUrl}/datasets/${datasetId}/anonymize`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetch(
+      `${this.baseUrl}/datasets/${datasetId}/anonymize`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(config),
       },
-      body: JSON.stringify(config),
-    });
+    );
     return this.handleResponse<AnonymizationResponse>(response);
   }
 
@@ -241,13 +264,17 @@ class AnnoyAPIClient {
 
   // Risk assessment endpoint
   async assessRisk(datasetId: string): Promise<RiskAssessment> {
-    const response = await fetch(`${this.baseUrl}/datasets/${datasetId}/risk-assessment`);
+    const response = await fetch(
+      `${this.baseUrl}/datasets/${datasetId}/risk-assessment`,
+    );
     return this.handleResponse<RiskAssessment>(response);
   }
 
   // Generate and download PDF compliance report
   async downloadComplianceReport(datasetId: string): Promise<Blob> {
-    const response = await fetch(`${this.baseUrl}/datasets/${datasetId}/report`);
+    const response = await fetch(
+      `${this.baseUrl}/datasets/${datasetId}/report`,
+    );
     if (!response.ok) {
       throw new Error(`Failed to generate report: ${response.statusText}`);
     }

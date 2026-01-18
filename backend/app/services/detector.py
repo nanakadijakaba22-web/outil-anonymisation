@@ -293,13 +293,99 @@ class SensitiveDataDetector:
         if not justification_parts:
             justification_parts.append("Classification basée sur analyse heuristique")
 
+        # Generate suggested configuration
+        suggested_config = self._get_suggested_config(
+            column_name=column_name,
+            sensitivity_type=final_type,
+            category=category,
+            data_type=data_type,
+            pattern_type=pattern_check[0] if pattern_check else None
+        )
+
         return ColumnClassification(
             column_name=column_name,
             sensitivity_type=final_type,
             category=category,
             confidence=confidence,
             justification="; ".join(justification_parts),
+            suggested_config=suggested_config,
         )
+
+    def _get_suggested_config(
+        self,
+        column_name: str,
+        sensitivity_type: DataType,
+        category: Category,
+        data_type: str,
+        pattern_type: str | None,
+    ) -> Any | None:
+        """
+        Generate suggested anonymization configuration based on content and type.
+        """
+        from app.models.schemas import AnonymizationConfig, AnonymizationTechnique
+
+        # Only suggest for sensitive data
+        if sensitivity_type == DataType.NON_SENSITIVE:
+            return None
+        
+        # 1. Direct Identifiers -> Masking or Suppression
+        if sensitivity_type == DataType.DIRECT_IDENTIFIER:
+            if pattern_type == "NAS":
+                 return AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.SUPPRESSION,
+                    params={}
+                )
+            # Default to masking for other direct identifiers
+            return AnonymizationConfig(
+                column_name=column_name,
+                technique=AnonymizationTechnique.MASKING,
+                params={"visible_chars": 2}
+            )
+
+        # 2. Quasi-Identifiers -> Generalization
+        if sensitivity_type == DataType.QUASI_IDENTIFIER:
+            # Date detection (Pattern or Type)
+            if pattern_type == "DATE" or "datetime" in data_type or "date" in data_type:
+                return AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.GENERALIZATION,
+                    params={"mode": "year"}
+                )
+            
+            # Postal Code detection
+            if pattern_type == "CODE_POSTAL_CA":
+                return AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.GENERALIZATION,
+                    params={"mode": "prefix", "prefix_length": 3}
+                )
+
+            # Numeric -> Bins
+            if "int" in data_type or "float" in data_type:
+                return AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.GENERALIZATION,
+                    params={"mode": "bins", "bins": 5}
+                )
+
+            # Default Text -> Prefix
+            return AnonymizationConfig(
+                column_name=column_name,
+                technique=AnonymizationTechnique.GENERALIZATION,
+                params={"mode": "prefix", "prefix_length": 3}
+            )
+
+        # 3. Sensitive Data -> Differential Privacy or Generalization
+        if sensitivity_type == DataType.SENSITIVE:
+            if "int" in data_type or "float" in data_type:
+                 return AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.GENERALIZATION,
+                    params={"mode": "bins", "bins": 5}
+                )
+        
+        return None
 
     def _check_column_name(self, col_name_lower: str) -> tuple[DataType, Category, float] | None:
         """Check if column name matches known patterns."""

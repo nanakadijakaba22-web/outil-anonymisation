@@ -81,6 +81,24 @@ class ColumnClassification(BaseModel):
     category: Category
     confidence: float = Field(ge=0, le=100, description="Confidence score 0-100")
     justification: str
+    suggested_config: Optional["AnonymizationConfig"] = None
+
+class AnonymizationConfig(BaseModel):
+    """Configuration for anonymizing a single column."""
+
+    column_name: str
+    technique: AnonymizationTechnique
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "column_name": "email",
+                "technique": "masking",
+                "params": {"visible_chars": 2}
+            }
+        }
+    )
 
 
 class ColumnSensitivityUpdate(BaseModel):
@@ -180,22 +198,7 @@ class DetectionReport(BaseModel):
 
 
 # Anonymization Schemas
-class AnonymizationConfig(BaseModel):
-    """Configuration for anonymizing a single column."""
 
-    column_name: str
-    technique: AnonymizationTechnique
-    params: dict[str, Any] = Field(default_factory=dict)
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "column_name": "email",
-                "technique": "masking",
-                "params": {"visible_chars": 2}
-            }
-        }
-    )
 
 
 class AnonymizationRequest(BaseModel):
