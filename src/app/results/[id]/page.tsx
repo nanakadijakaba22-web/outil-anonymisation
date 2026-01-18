@@ -8,6 +8,8 @@ import { getRiskLevelColor, getRiskGaugeColor } from '@/lib/utils';
 import Stepper from '@/components/Stepper';
 import ProgressBadge from '@/components/ProgressBadge';
 import InteractiveCharts from '@/components/InteractiveCharts';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import Header from '@/components/Header';
 
 export default function ResultsPage() {
   const router = useRouter();
@@ -170,12 +172,14 @@ export default function ResultsPage() {
   const overallColors = getRiskLevelColor(assessment.overall_level);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Progress Badge */}
-      <ProgressBadge
-        currentStep="results"
-        completedSteps={['upload', 'detection', 'anonymization']}
-      />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <Header />
+        {/* Progress Badge */}
+        <ProgressBadge
+          currentStep="results"
+          completedSteps={['upload', 'detection', 'anonymization']}
+        />
 
       <div className="container mx-auto px-4 py-12">
         {/* Header */}
@@ -461,6 +465,7 @@ export default function ResultsPage() {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

@@ -82,7 +82,7 @@ class Settings(BaseSettings):
         ).unicode_string()
 
     # File Upload Settings
-    MAX_UPLOAD_SIZE: int = 100 * 1024 * 1024  # 100MB in bytes
+    MAX_UPLOAD_SIZE: int = 1 * 1024 * 1024 * 1024  # 1GB in bytes (increased for banking institutions with large datasets)
     ALLOWED_EXTENSIONS: set[str] = {".csv"}
     UPLOAD_DIR: str = "./uploads"
 
@@ -94,6 +94,11 @@ class Settings(BaseSettings):
     ENABLE_AI_DETECTION: bool = False  # Enable when GROQ_API_KEY is set
     AI_CONFIDENCE_THRESHOLD: float = 70.0  # Use AI for columns with confidence < threshold
     GROQ_MODEL: str = "llama-3.1-8b-instant"  # Lightweight model for data classification
+
+    # Authentication & Security Settings
+    JWT_SECRET_KEY: str = "CHANGE_THIS_TO_A_RANDOM_SECRET_KEY_IN_PRODUCTION"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # 30 minutes token expiration
 
     model_config = SettingsConfigDict(
         env_file=".env",

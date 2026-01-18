@@ -6,6 +6,8 @@ import { api } from '@/lib/api';
 import { formatFileSize } from '@/lib/utils';
 import Stepper from '@/components/Stepper';
 import ProgressBadge from '@/components/ProgressBadge';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import Header from '@/components/Header';
 
 export default function Home() {
   const router = useRouter();
@@ -49,10 +51,10 @@ export default function Home() {
       return;
     }
 
-    // Validate file size (100MB)
-    const maxSize = 100 * 1024 * 1024;
+    // Validate file size (1GB)
+    const maxSize = 1 * 1024 * 1024 * 1024;
     if (selectedFile.size > maxSize) {
-      setError('Le fichier est trop volumineux (max 100MB)');
+      setError('Le fichier est trop volumineux (max 1GB)');
       return;
     }
 
@@ -78,9 +80,11 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Progress Badge */}
-      <ProgressBadge currentStep="upload" completedSteps={[]} />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <Header />
+        {/* Progress Badge */}
+        <ProgressBadge currentStep="upload" completedSteps={[]} />
 
       <div className="container mx-auto px-4 py-12">
         {/* Header */}
@@ -158,7 +162,7 @@ export default function Home() {
                     ou glissez-déposez
                   </p>
                   <p className="text-sm text-gray-500">
-                    Fichiers CSV uniquement (max 100MB)
+                    Fichiers CSV uniquement (max 1GB)
                   </p>
                 </>
               ) : (
@@ -273,6 +277,7 @@ export default function Home() {
           </p>
         </div>
       </div>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

@@ -13,6 +13,8 @@ import {
 } from '@/lib/utils';
 import Stepper from '@/components/Stepper';
 import ProgressBadge from '@/components/ProgressBadge';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import Header from '@/components/Header';
 
 type SensitivityType = 'direct_identifier' | 'quasi_identifier' | 'sensitive' | 'non_sensitive';
 type Category = 'personal' | 'financial' | 'health' | 'insurance' | 'other';
@@ -183,9 +185,11 @@ export default function DetectionPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Progress Badge */}
-      <ProgressBadge currentStep="detection" completedSteps={['upload']} />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <Header />
+        {/* Progress Badge */}
+        <ProgressBadge currentStep="detection" completedSteps={['upload']} />
 
       <div className="container mx-auto px-4 py-12">
         {/* Header */}
@@ -462,6 +466,7 @@ export default function DetectionPage() {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

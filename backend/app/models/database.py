@@ -288,3 +288,32 @@ class SuppressedColumn(Base):
 
     def __repr__(self):
         return f"<SuppressedColumn(column={self.column_name}, job_id={self.job_id})>"
+
+
+class User(Base):
+    """
+    Stores user accounts for authentication and authorization.
+
+    Compliant with Quebec Law 25 for personal information protection.
+    """
+
+    __tablename__ = "users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+
+    # Account status
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_superuser = Column(Boolean, default=False, nullable=False)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+    last_login = Column(DateTime(timezone=True), nullable=True)
+
+    # Profile information (optional)
+    full_name = Column(String(255), nullable=True)
+
+    def __repr__(self):
+        return f"<User(id={self.id}, email={self.email}, is_active={self.is_active})>"

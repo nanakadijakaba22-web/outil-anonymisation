@@ -273,3 +273,69 @@ class HealthResponse(BaseModel):
     status: str
     service: str
     version: str
+
+
+# Authentication Schemas
+class UserBase(BaseModel):
+    """Base user schema with common fields."""
+
+    email: str = Field(..., description="User email address", max_length=255)
+    full_name: Optional[str] = Field(None, description="User full name", max_length=255)
+
+
+class UserCreate(UserBase):
+    """Schema for user registration."""
+
+    password: str = Field(..., min_length=8, description="User password (min 8 characters)")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "email": "user@example.com",
+                "full_name": "Jean Tremblay",
+                "password": "SecurePassword123!"
+            }
+        }
+    )
+
+
+class UserLogin(BaseModel):
+    """Schema for user login."""
+
+    email: str = Field(..., description="User email address")
+    password: str = Field(..., description="User password")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "email": "user@example.com",
+                "password": "SecurePassword123!"
+            }
+        }
+    )
+
+
+class UserResponse(UserBase):
+    """Schema for user response (excludes password)."""
+
+    id: UUID
+    is_active: bool
+    is_superuser: bool
+    created_at: datetime
+    last_login: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Token(BaseModel):
+    """JWT token response."""
+
+    access_token: str
+    token_type: str = "bearer"
+
+
+class TokenData(BaseModel):
+    """Data stored in JWT token."""
+
+    email: Optional[str] = None
+    user_id: Optional[UUID] = None
