@@ -150,9 +150,14 @@ class AnnoyAPIClient {
     return this.handleResponse<Dataset>(response);
   }
 
-  async getDatasetPreview(datasetId: string, nRows: number = 10): Promise<DatasetPreview> {
+  async getDatasetPreview(
+    datasetId: string,
+    nRows: number = 10,
+    options?: { signal?: AbortSignal }
+  ): Promise<DatasetPreview> {
     const response = await fetch(
-      `${this.baseUrl}/datasets/${datasetId}/preview?n_rows=${nRows}`
+      `${this.baseUrl}/datasets/${datasetId}/preview?n_rows=${nRows}`,
+      options
     );
     return this.handleResponse<DatasetPreview>(response);
   }

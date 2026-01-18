@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, DatasetPreview, Dataset } from '@/lib/api';
 import { formatFileSize } from '@/lib/utils';
 import Stepper from '@/components/Stepper';
 import ProgressBadge from '@/components/ProgressBadge';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Header from '@/components/Header';
+import DataPreviewTable from '@/components/DataPreviewTable';
 
 export default function Home() {
   const router = useRouter();
@@ -15,6 +16,12 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Preview state
+  const [showPreview, setShowPreview] = useState(false);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [preview, setPreview] = useState<DatasetPreview | null>(null);
+  const [uploadedDataset, setUploadedDataset] = useState<Dataset | null>(null);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -70,13 +77,50 @@ export default function Home() {
 
     try {
       const dataset = await api.uploadDataset(file);
-      // Redirect to detection page
-      router.push(`/detection/${dataset.id}`);
+      setUploadedDataset(dataset);
+
+      // Load preview with timeout
+      setLoadingPreview(true);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+      try {
+        const previewData = await api.getDatasetPreview(dataset.id, 10, { signal: controller.signal });
+        setPreview(previewData);
+        setShowPreview(true);
+      } catch (previewErr) {
+        console.error('Error loading preview:', previewErr);
+
+        if (previewErr instanceof Error && previewErr.name === 'AbortError') {
+          setError('Délai d\'attente dépassé pour la prévisualisation. Vous pouvez continuer vers la détection.');
+        } else {
+          setError('Erreur lors du chargement de la prévisualisation. Vous pouvez continuer vers la détection.');
+        }
+
+        setShowPreview(true); // Allow user to continue even if preview fails
+      } finally {
+        clearTimeout(timeoutId);
+        setLoadingPreview(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de l\'upload');
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleContinueToDetection = () => {
+    if (uploadedDataset) {
+      router.push(`/detection/${uploadedDataset.id}`);
+    }
+  };
+
+  const handleResetUpload = () => {
+    setFile(null);
+    setShowPreview(false);
+    setPreview(null);
+    setUploadedDataset(null);
+    setError(null);
   };
 
   return (
@@ -104,15 +148,17 @@ export default function Home() {
         <Stepper currentStep="upload" completedSteps={[]} />
 
         {/* Main Card */}
-        <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-2">
-              Téléverser un fichier CSV
-            </h2>
-            <p className="text-gray-600">
-              Glissez-déposez votre fichier ou cliquez pour parcourir
-            </p>
-          </div>
+        <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl p-8">
+          {!showPreview ? (
+            <>
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-semibold text-gray-800 mb-2">
+                  Téléverser un fichier CSV
+                </h2>
+                <p className="text-gray-600">
+                  Glissez-déposez votre fichier ou cliquez pour parcourir
+                </p>
+              </div>
 
           {/* Drop Zone */}
           <div
@@ -268,6 +314,77 @@ export default function Home() {
               </div>
             </div>
           </div>
+            </>
+          ) : (
+            <>
+              {/* Preview View */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-semibold text-gray-800 mb-1">
+                      Prévisualisation des données
+                    </h2>
+                    {uploadedDataset && (
+                      <p className="text-sm text-gray-600">
+                        Fichier: <span className="font-medium">{uploadedDataset.filename}</span>
+                        {' '}({formatFileSize(uploadedDataset.file_size)})
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleResetUpload}
+                    className="text-sm text-gray-600 hover:text-gray-800 flex items-center"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Nouveau fichier
+                  </button>
+                </div>
+
+                {/* Preview Table or Loading */}
+                {loadingPreview ? (
+                  <DataPreviewTable preview={{} as DatasetPreview} isLoading={true} />
+                ) : preview ? (
+                  <DataPreviewTable preview={preview} />
+                ) : (
+                  <div className="text-center py-12 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="max-w-md mx-auto">
+                      <svg className="w-12 h-12 text-yellow-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        Prévisualisation indisponible
+                      </h3>
+                      <p className="text-sm text-gray-600 mb-4">
+                        {error || 'Une erreur s\'est produite lors du chargement des données'}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Vous pouvez continuer vers la détection sans prévisualisation
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-4 pt-6 border-t border-gray-200">
+                <button
+                  onClick={handleResetUpload}
+                  className="flex-1 py-3 px-6 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-all"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleContinueToDetection}
+                  disabled={!uploadedDataset}
+                  className="flex-1 py-3 px-6 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+                >
+                  Continuer vers la détection
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
