@@ -48,6 +48,128 @@ class Anonymizer:
         # Cache for pseudonymization to ensure consistency
         self._pseudonym_cache: Dict[str, str] = {}
 
+    def generate_auto_config(self, dataset_id: UUID) -> List[AnonymizationConfig]:
+        """
+        Génère automatiquement la configuration d'anonymisation selon les règles Loi 25.
+
+        Règles automatiques:
+        - Identifiants directs → suppression (colonnes supprimées)
+        - Quasi-identifiants → généralisation (texte→préfixe, numérique→tranches, date→année)
+        - Données sensibles → confidentialité différentielle (Laplace, epsilon=0.1)
+        - Non sensibles → aucune transformation
+
+        Args:
+            dataset_id: UUID du dataset déjà analysé (détection effectuée)
+
+        Returns:
+            Liste de configurations d'anonymisation par colonne
+        """
+        from app.models.database import DatasetColumn
+        from app.models.schemas import DataType
+
+        # Récupérer les colonnes avec leur classification
+        columns = self.db.query(DatasetColumn).filter(
+            DatasetColumn.dataset_id == dataset_id
+        ).all()
+
+        if not columns:
+            raise ValueError(f"Aucune colonne trouvée pour le dataset {dataset_id}. Exécutez d'abord la détection.")
+
+        # Charger le DataFrame pour analyser les types de données
+        df = self.ingestion_service.load_dataframe(dataset_id)
+
+        configs: List[AnonymizationConfig] = []
+
+        for column in columns:
+            sensitivity = column.sensitivity_type
+            col_name = column.name
+
+            if col_name not in df.columns:
+                continue
+
+            # Ignorer les colonnes non sensibles
+            if sensitivity == DataType.NON_SENSITIVE.value or sensitivity is None:
+                continue
+
+            # === IDENTIFIANTS DIRECTS → SUPPRESSION ===
+            if sensitivity == DataType.DIRECT_IDENTIFIER.value:
+                configs.append(AnonymizationConfig(
+                    column_name=col_name,
+                    technique=AnonymizationTechnique.SUPPRESSION,
+                    params={"reason": "Identifiant direct - suppression automatique Loi 25"}
+                ))
+                logger.info(f"Config auto: {col_name} → SUPPRESSION (identifiant direct)")
+
+            # === QUASI-IDENTIFIANTS → GÉNÉRALISATION ===
+            elif sensitivity == DataType.QUASI_IDENTIFIER.value:
+                params = self._get_generalization_params(df, col_name)
+                configs.append(AnonymizationConfig(
+                    column_name=col_name,
+                    technique=AnonymizationTechnique.GENERALIZATION,
+                    params=params
+                ))
+                logger.info(f"Config auto: {col_name} → GÉNÉRALISATION {params}")
+
+            # === DONNÉES SENSIBLES → CONFIDENTIALITÉ DIFFÉRENTIELLE ===
+            elif sensitivity == DataType.SENSITIVE.value:
+                # Vérifier si la colonne est numérique pour DP
+                if pd.api.types.is_numeric_dtype(df[col_name]):
+                    configs.append(AnonymizationConfig(
+                        column_name=col_name,
+                        technique=AnonymizationTechnique.DIFFERENTIAL_PRIVACY,
+                        params={
+                            "epsilon": 0.1,  # Haute sécurité
+                            "mechanism": "laplace",
+                            "clip_to_range": True,
+                            "reason": "Données sensibles - DP Laplace epsilon=0.1"
+                        }
+                    ))
+                    logger.info(f"Config auto: {col_name} → DIFFERENTIAL_PRIVACY (epsilon=0.1)")
+                else:
+                    # Colonnes sensibles non numériques → généralisation agressive
+                    configs.append(AnonymizationConfig(
+                        column_name=col_name,
+                        technique=AnonymizationTechnique.GENERALIZATION,
+                        params={
+                            "prefix_length": 2,  # Préfixe court pour plus d'anonymat
+                            "reason": "Données sensibles non numériques - généralisation"
+                        }
+                    ))
+                    logger.info(f"Config auto: {col_name} → GÉNÉRALISATION (données sensibles texte)")
+
+        return configs
+
+    def _get_generalization_params(self, df: pd.DataFrame, column: str) -> Dict[str, Any]:
+        """
+        Détermine les paramètres de généralisation selon le type de données.
+
+        - Dates → extraction année
+        - Numériques → tranches (bins=5)
+        - Texte → préfixe (3 caractères)
+        """
+        col_data = df[column]
+
+        # 1. Vérifier si c'est une date (datetime)
+        if pd.api.types.is_datetime64_any_dtype(col_data):
+            return {"method": "year", "reason": "Date → extraction année"}
+
+        # 2. Essayer de détecter les dates textuelles
+        if col_data.dtype == "object" or pd.api.types.is_string_dtype(col_data):
+            sample = col_data.dropna().head(20)
+            try:
+                date_conversion = pd.to_datetime(sample, errors="coerce")
+                if len(sample) > 0 and date_conversion.notna().sum() / len(sample) >= 0.7:
+                    return {"method": "year", "reason": "Date textuelle → extraction année"}
+            except (ValueError, TypeError):
+                pass
+
+        # 3. Numérique → tranches
+        if pd.api.types.is_numeric_dtype(col_data):
+            return {"bins": 5, "reason": "Numérique → tranches"}
+
+        # 4. Texte → préfixe
+        return {"prefix_length": 3, "reason": "Texte → préfixe 3 caractères"}
+
     async def anonymize_dataset(
         self,
         dataset_id: UUID,
