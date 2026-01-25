@@ -16,21 +16,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Stack technique
 
-| Composant               | Technologie  | Version |
-| ----------------------- | ------------ | ------- |
-| **Backend**             | FastAPI      | 0.109+  |
-| **Frontend**            | Next.js      | 16.1    |
-| **Language (Backend)**  | Python       | 3.11+   |
-| **Language (Frontend)** | TypeScript   | 5       |
-| **UI Framework**        | React        | 19      |
-| **Database**            | PostgreSQL   | 15      |
-| **ORM**                 | SQLAlchemy   | 2.0     |
-| **Validation**          | Pydantic     | 2.6     |
-| **Styling**             | Tailwind CSS | v4      |
-| **PDF Generation**      | ReportLab    | 4.0     |
-| **AI/ML**               | Groq         | 0.13+   |
-| **Containerization**    | Docker       | Latest  |
-| **Reverse Proxy**       | Nginx        | Alpine  |
+| Composant               | Technologie  | Version     |
+| ----------------------- | ------------ | ----------- |
+| **Backend**             | FastAPI      | 0.109+      |
+| **Frontend**            | Next.js      | 16.1        |
+| **Language (Backend)**  | Python       | 3.11+       |
+| **Language (Frontend)** | TypeScript   | 5           |
+| **UI Framework**        | React        | 19          |
+| **Database**            | PostgreSQL   | 15          |
+| **ORM**                 | SQLAlchemy   | 2.0         |
+| **Validation**          | Pydantic     | 2.6         |
+| **Styling**             | Tailwind CSS | v4          |
+| **PDF Generation**      | ReportLab    | 4.0         |
+| **AI/ML**               | Ollama       | llama3.1:8b |
+| **Containerization**    | Docker       | Latest      |
+| **Reverse Proxy**       | Nginx        | Alpine      |
 
 ---
 
@@ -1072,9 +1072,9 @@ docker system prune -a
    - Frontend: Logs avec `docker-compose logs -f frontend`
    - DB: Accès direct avec `docker-compose exec db psql -U postgres -d annoy_db`
 
-8. **Groq Integration**: Le projet utilise Groq (0.13+) pour des fonctionnalités ML/AI futures. Actuellement non utilisé dans le workflow principal.
+8. **Ollama Integration**: L'application utilise Ollama (llama3.1:8b) pour la détection IA locale des données sensibles. Voir docs/AI_ENHANCED_DETECTION.md et docs/OLLAMA_SETUP.md pour configuration.
 
-\*Important: I don't want you to write any code yourself. Your role is to coordinate the efforts between Coding Agents anc Code Review Agents. Have a look at this implementation plan, and I want yo to create different tracks.h track, kick off a coding agent to implement the changes for that track. You need to use the Coder agent for this. Once the coding agent completes its work, you need to hand over the solution to the code review agent and then let the code review agent provide feedback back to the coder agent. The cycle should continue until all changes have been fully implemented. Again, I do not want you to implement anything yourself. You need to keep your context window as lean as possible. Coordinate all the different efforts between the tracks, the coder agents, and code review agents.
+\*Important: I don't want you to write any code yourself. Your role is to coordinate the efforts Coding Agents Have a look at this implementation plan, and I want yo to create different tracks.h track, kick off a coding agent to implement the changes for that track. You need to use the Coder agent for this. Once the coding agent completes its work, You need to keep your context window as lean as possible. Coordinate all the different efforts between the tracks, the coder agents,
 
 ---
 

@@ -117,7 +117,27 @@ Total de **23 commits** professionnels:
 
 ## [Unreleased]
 
-### À venir (v0.2.0)
+### [0.2.0] - 2026-01-25
+
+### 🔄 Changed
+- **Migration de Groq vers Ollama pour détection IA**
+  - Utilisation de Llama 3.1 8B en local (100% privé)
+  - Aucun coût d'API, données sensibles restent locales
+  - Configuration: `OLLAMA_BASE_URL` et `OLLAMA_MODEL` dans .env
+  - Meilleure conformité à la Loi 25 (pas d'envoi de données au cloud)
+  - Documentation complète dans `docs/AI_ENHANCED_DETECTION.md`
+
+### 🗑️ Removed
+- Dépendance Groq API et configuration associée
+- Variables d'environnement `GROQ_API_KEY` et `GROQ_MODEL`
+
+### 📝 Documentation
+- Mise à jour complète de `docs/AI_ENHANCED_DETECTION.md` avec guide Ollama
+- Ajout de `docs/OLLAMA_SETUP.md` pour installation détaillée
+- Mise à jour de `CLAUDE.md` et `README.md` avec références Ollama
+- Guide de migration Groq → Ollama dans la documentation
+
+### À venir (v0.3.0)
 
 #### Fonctionnalités planifiées
 - Support Excel/XLSX

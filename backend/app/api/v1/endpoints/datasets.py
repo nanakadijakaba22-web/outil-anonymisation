@@ -176,7 +176,7 @@ async def detect_sensitive_data(
 
     **Detection Strategy:**
     - Uses rule-based heuristics (fast, always available)
-    - Optionally enhanced with Groq AI for ambiguous cases (if GROQ_API_KEY is set)
+    - Optionally enhanced with Ollama AI (local) for ambiguous cases (if ENABLE_AI_DETECTION=true)
     - For columns with confidence < 70%, AI provides additional validation
 
     Returns detailed classification of each column:
@@ -192,7 +192,7 @@ async def detect_sensitive_data(
     - Overall dataset risk score
 
     **AI Enhancement:**
-    If GROQ_API_KEY is configured, AI will improve classification accuracy
+    If Ollama is running (ENABLE_AI_DETECTION=true), AI will improve classification accuracy
     for ambiguous columns. Justifications starting with [IA] indicate AI-enhanced results.
     """
     # Use AI-enhanced detector which falls back to rule-based if AI unavailable
