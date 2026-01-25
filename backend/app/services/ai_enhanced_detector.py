@@ -1,5 +1,5 @@
 """
-AI-Enhanced sensitive data detection service using Groq LLM.
+AI-Enhanced sensitive data detection service using Ollama LLM.
 
 This service extends the rule-based SensitiveDataDetector with AI capabilities
 to improve detection accuracy for ambiguous cases.
@@ -9,7 +9,7 @@ import logging
 from typing import Any, List
 from uuid import UUID
 
-from groq import Groq
+import ollama
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -30,7 +30,7 @@ class AIEnhancedDetector(SensitiveDataDetector):
 
     Strategy:
     1. First use rule-based detection (fast, free)
-    2. For low confidence columns (< threshold), use Groq AI for verification
+    2. For low confidence columns (< threshold), use Ollama AI for verification
     3. Combine results intelligently
     """
 
@@ -62,18 +62,43 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
 
     def __init__(self, db: Session):
         super().__init__(db)
-        self.groq_client = None
+        self.ollama_available = False
         self.ai_enabled = False
 
-        # Initialize Groq client if API key is available
-        if settings.GROQ_API_KEY:
+        # Check if Ollama is available
+        if settings.ENABLE_AI_DETECTION:
             try:
-                self.groq_client = Groq(api_key=settings.GROQ_API_KEY)
-                self.ai_enabled = settings.ENABLE_AI_DETECTION
-                logger.info("Groq AI detection initialized successfully")
+                self._check_ollama_connection()
+                self.ollama_available = True
+                self.ai_enabled = True
+                logger.info(f"Ollama AI detection initialized successfully (model: {settings.OLLAMA_MODEL})")
             except Exception as e:
-                logger.warning(f"Failed to initialize Groq client: {e}")
+                logger.warning(f"Failed to connect to Ollama: {e}. Falling back to rule-based detection.")
                 self.ai_enabled = False
+
+    def _check_ollama_connection(self):
+        """
+        Verify that Ollama is running and the model is available.
+
+        Raises:
+            Exception: If Ollama is not accessible or model is not available
+        """
+        try:
+            # Test connection by listing available models
+            models = ollama.list()
+            model_names = [m.model for m in models.models]
+
+            # Check if our configured model is available
+            if settings.OLLAMA_MODEL not in model_names:
+                logger.warning(
+                    f"Model '{settings.OLLAMA_MODEL}' not found. Available models: {model_names}"
+                )
+                raise Exception(f"Model '{settings.OLLAMA_MODEL}' not available in Ollama")
+
+            logger.info(f"Ollama connection verified. Model '{settings.OLLAMA_MODEL}' is available.")
+        except Exception as e:
+            logger.error(f"Ollama connection check failed: {e}")
+            raise
 
     async def analyze_dataset(self, dataset_id: UUID) -> DetectionReport:
         """
@@ -84,9 +109,9 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
         # First, run the standard rule-based detection
         report = await super().analyze_dataset(dataset_id)
 
-        # If AI is disabled or not available, return standard report
-        if not self.ai_enabled or not self.groq_client:
-            logger.info("AI detection disabled, using rule-based detection only")
+        # If AI is disabled or Ollama is not available, return standard report
+        if not self.ai_enabled or not self.ollama_available:
+            logger.info("AI detection disabled or Ollama unavailable, using rule-based detection only")
             return report
 
         # Load dataset for AI enhancement
@@ -153,7 +178,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
         rule_based_result: ColumnClassification,
     ) -> ColumnClassification | None:
         """
-        Use Groq AI to classify a column.
+        Use Ollama AI to classify a column.
 
         Args:
             column_name: Name of the column
@@ -164,7 +189,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
         Returns:
             AI-based classification or None if failed
         """
-        if not self.groq_client:
+        if not self.ollama_available:
             return None
 
         # Prepare user prompt
@@ -190,20 +215,22 @@ Fournis ta classification en JSON avec cette structure exacte:
 }}"""
 
         try:
-            # Call Groq API with JSON mode
-            response = self.groq_client.chat.completions.create(
-                model=settings.GROQ_MODEL,
+            # Call Ollama API with JSON format
+            response = ollama.chat(
+                model=settings.OLLAMA_MODEL,
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
                 ],
-                response_format={"type": "json_object"},
-                temperature=0.1,  # Low temperature for consistent classification
-                max_tokens=500,
+                format="json",
+                options={
+                    "temperature": 0.1,  # Low temperature for consistent classification
+                    "num_predict": 500,
+                }
             )
 
             # Parse JSON response
-            ai_result = json.loads(response.choices[0].message.content)
+            ai_result = json.loads(response['message']['content'])
 
             # Validate and convert to ColumnClassification
             return ColumnClassification(

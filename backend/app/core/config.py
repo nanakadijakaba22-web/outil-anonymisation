@@ -90,10 +90,10 @@ class Settings(BaseSettings):
     DEFAULT_PSEUDONYM_SEED: int = 42
 
     # AI Enhanced Detection Settings
-    GROQ_API_KEY: str | None = None
-    ENABLE_AI_DETECTION: bool = False  # Enable when GROQ_API_KEY is set
-    AI_CONFIDENCE_THRESHOLD: float = 70.0  # Use AI for columns with confidence < threshold
-    GROQ_MODEL: str = "llama-3.1-8b-instant"  # Lightweight model for data classification
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3.1:8b"
+    ENABLE_AI_DETECTION: bool = False
+    AI_CONFIDENCE_THRESHOLD: float = 70.0
 
     # Authentication & Security Settings
     JWT_SECRET_KEY: str = "CHANGE_THIS_TO_A_RANDOM_SECRET_KEY_IN_PRODUCTION"
