@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(timeout 60 tail:*)",
+      "Bash(python -m py_compile:*)"
+    ]
+  }
+}

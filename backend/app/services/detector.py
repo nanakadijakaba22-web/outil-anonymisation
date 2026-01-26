@@ -67,6 +67,9 @@ class SensitiveDataDetector:
             "id_client", "client_id", "customer_id", "user_id", "userid",
             "identifiant", "identifier", "numero_client", "customer_number",
             "no_client", "client_no", "account_id", "compte_id",
+            # Numéros de compte (identifiants bancaires)
+            "numero_compte", "account_number", "no_compte", "account_no",
+            "num_compte", "numero_de_compte",
         ],
 
         # Quasi-identifiers
@@ -77,6 +80,9 @@ class SensitiveDataDetector:
             "genre", "gender", "sexe", "sex",
             "adresse", "address", "rue", "street",
             "ville", "city", "province", "state",
+            # Dates diverses
+            "date_ouverture", "opening_date", "date_creation", "creation_date",
+            "date_inscription", "registration_date",
         ],
 
         # Financial data (sensitive)
@@ -85,6 +91,10 @@ class SensitiveDataDetector:
             "solde", "balance", "montant", "amount",
             "compte", "account", "credit", "debit",
             "prix", "price", "cout", "cost",
+            # Champs financiers spécifiques
+            "solde_compte", "account_balance", "balance_compte",
+            "revenu_annuel", "annual_income", "yearly_income",
+            "revenu_mensuel", "monthly_income",
         ],
 
         # Health data (sensitive)

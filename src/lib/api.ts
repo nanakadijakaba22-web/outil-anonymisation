@@ -250,6 +250,23 @@ class AnnoyAPIClient {
     return this.handleResponse<AnonymizationResponse>(response);
   }
 
+  /**
+   * Lance l'anonymisation automatique complète selon la Loi 25
+   * Applique automatiquement les techniques optimales pour chaque type de données
+   */
+  async autoAnonymizeDataset(datasetId: string): Promise<AnonymizationResponse> {
+    const response = await fetch(
+      `${this.baseUrl}/anonymization/${datasetId}/auto-anonymize`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+    return this.handleResponse<AnonymizationResponse>(response);
+  }
+
   getDownloadUrl(datasetId: string): string {
     return `${this.baseUrl}/datasets/${datasetId}/download`;
   }

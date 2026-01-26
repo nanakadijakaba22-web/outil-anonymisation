@@ -92,8 +92,9 @@ class Settings(BaseSettings):
     # AI Enhanced Detection Settings
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"
-    ENABLE_AI_DETECTION: bool = False
+    ENABLE_AI_DETECTION: bool = True  # Activé par défaut
     AI_CONFIDENCE_THRESHOLD: float = 70.0
+    OLLAMA_ANALYZE_ALL_COLUMNS: bool = True  # Analyser TOUS les champs avec Ollama
 
     # Authentication & Security Settings
     JWT_SECRET_KEY: str = "CHANGE_THIS_TO_A_RANDOM_SECRET_KEY_IN_PRODUCTION"

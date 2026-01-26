@@ -502,6 +502,144 @@ class Anonymizer:
 
         return df, metadata
 
+    async def auto_anonymize(self, dataset_id: UUID) -> AnonymizationResponse:
+        """
+        Applique automatiquement les techniques d'anonymisation selon la sensibilité détectée.
+
+        Cette méthode exécute d'abord une détection des données sensibles, puis applique
+        automatiquement les techniques d'anonymisation appropriées selon les règles suivantes:
+
+        Règles d'application:
+        - Identifiants directs: SUPPRESSION (NAS, cartes) ou MASKING (email, téléphone, nom)
+        - Données sensibles numériques: DIFFERENTIAL_PRIVACY (epsilon=0.1, mechanism=laplace)
+        - Quasi-identifiants dates: GENERALIZATION (mode=year)
+        - Quasi-identifiants numériques: GENERALIZATION (mode=bins, bins=5)
+        - Quasi-identifiants texte/postal: GENERALIZATION (mode=prefix, prefix_length=3)
+
+        Args:
+            dataset_id: UUID of the dataset to auto-anonymize
+
+        Returns:
+            AnonymizationResponse with job details, new dataset ID, and applied techniques
+        """
+        from app.services.ai_enhanced_detector import AIEnhancedDetector
+
+        # 1. Charger le dataset en utilisant le service d'ingestion
+        df = self.ingestion_service.load_dataframe(dataset_id)
+
+        # 2. Exécuter la détection (avec IA si disponible)
+        detector = AIEnhancedDetector(self.db)
+        detection_report = await detector.analyze_dataset(dataset_id)
+
+        # 3. Construire la configuration automatique
+        configs: List[AnonymizationConfig] = []
+        applied_techniques: Dict[str, Any] = {}
+
+        for column_name, classification in detection_report.columns.items():
+            config = None
+
+            # Get pattern type from justification if available
+            pattern_type = None
+            if "NAS" in classification.justification.upper():
+                pattern_type = "NAS"
+            elif "CARTE" in classification.justification.upper() or "CREDIT" in classification.justification.upper():
+                pattern_type = "CREDIT_CARD"
+
+            if classification.sensitivity_type.value == "direct_identifier":
+                # NAS et cartes: SUPPRESSION, autres: MASKING
+                if pattern_type in ["NAS", "CREDIT_CARD", "SSN"]:
+                    config = AnonymizationConfig(
+                        column_name=column_name,
+                        technique=AnonymizationTechnique.SUPPRESSION,
+                        params={}
+                    )
+                else:
+                    config = AnonymizationConfig(
+                        column_name=column_name,
+                        technique=AnonymizationTechnique.MASKING,
+                        params={"visible_chars": 2}
+                    )
+
+            elif classification.sensitivity_type.value == "sensitive":
+                # Données sensibles: DP si numérique, sinon généralisation
+                if column_name in df.columns and pd.api.types.is_numeric_dtype(df[column_name]):
+                    config = AnonymizationConfig(
+                        column_name=column_name,
+                        technique=AnonymizationTechnique.DIFFERENTIAL_PRIVACY,
+                        params={"epsilon": 0.1, "mechanism": "laplace"}
+                    )
+                else:
+                    config = AnonymizationConfig(
+                        column_name=column_name,
+                        technique=AnonymizationTechnique.GENERALIZATION,
+                        params={"mode": "prefix", "prefix_length": 3}
+                    )
+
+            elif classification.sensitivity_type.value == "quasi_identifier":
+                # Quasi-identifiants: selon le type de données
+                if column_name in df.columns:
+                    col_data = df[column_name]
+
+                    # Check if date type
+                    if pd.api.types.is_datetime64_any_dtype(col_data):
+                        config = AnonymizationConfig(
+                            column_name=column_name,
+                            technique=AnonymizationTechnique.GENERALIZATION,
+                            params={"mode": "year"}
+                        )
+                    # Try to detect date strings
+                    elif col_data.dtype == "object":
+                        sample = col_data.dropna().head(10)
+                        try:
+                            date_conversion = pd.to_datetime(sample, errors="coerce")
+                            if date_conversion.notna().sum() / len(sample) >= 0.7:
+                                config = AnonymizationConfig(
+                                    column_name=column_name,
+                                    technique=AnonymizationTechnique.GENERALIZATION,
+                                    params={"mode": "year"}
+                                )
+                        except (ValueError, TypeError):
+                            pass
+
+                    # Numeric quasi-identifiers
+                    if config is None and pd.api.types.is_numeric_dtype(col_data):
+                        config = AnonymizationConfig(
+                            column_name=column_name,
+                            technique=AnonymizationTechnique.GENERALIZATION,
+                            params={"mode": "bins", "bins": 5}
+                        )
+
+                    # Text/postal codes -> prefix
+                    if config is None:
+                        config = AnonymizationConfig(
+                            column_name=column_name,
+                            technique=AnonymizationTechnique.GENERALIZATION,
+                            params={"mode": "prefix", "prefix_length": 3}
+                        )
+
+            if config:
+                configs.append(config)
+                applied_techniques[column_name] = {
+                    "technique": config.technique.value,
+                    "params": config.params,
+                    "reason": classification.sensitivity_type.value,
+                    "confidence": classification.confidence
+                }
+
+        # 4. Appliquer l'anonymisation en utilisant la méthode existante
+        if configs:
+            result = await self.anonymize_dataset(dataset_id, configs)
+            # Add applied techniques info to the result as extra metadata
+            logger.info(
+                f"Auto-anonymization completed for dataset {dataset_id}. "
+                f"Applied {len(configs)} transformations: {list(applied_techniques.keys())}"
+            )
+            return result
+        else:
+            # No sensitive columns found, return a response indicating no changes
+            logger.info(f"No sensitive columns detected in dataset {dataset_id}, no anonymization applied")
+            raise ValueError("Aucune colonne sensible détectée nécessitant une anonymisation")
+
     async def _save_anonymized_dataset(
         self,
         df: pd.DataFrame,

@@ -35,6 +35,7 @@ export default function DetectionPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isAutoAnonymizing, setIsAutoAnonymizing] = useState(false);
 
   useEffect(() => {
     const runDetection = async () => {
@@ -123,6 +124,20 @@ export default function DetectionPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
       setSaving(false);
+    }
+  };
+
+  const handleAutoAnonymize = async () => {
+    setIsAutoAnonymizing(true);
+    setError(null);
+    try {
+      const response = await api.autoAnonymizeDataset(datasetId);
+      // Redirect to results page with anonymized dataset
+      router.push(`/results/${response.anonymized_dataset_id}`);
+    } catch (err) {
+      console.error('Auto-anonymization failed:', err);
+      setError(err instanceof Error ? err.message : 'Erreur lors de l\'anonymisation automatique');
+      setIsAutoAnonymizing(false);
     }
   };
 

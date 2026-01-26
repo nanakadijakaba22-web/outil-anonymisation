@@ -81,6 +81,57 @@ async def anonymize_dataset(
     return await anonymizer.anonymize_dataset(dataset_id, config)
 
 
+@router.post("/{dataset_id}/auto-anonymize", response_model=AnonymizationResponse)
+async def auto_anonymize_dataset(
+    dataset_id: UUID,
+    db: Session = Depends(get_db)
+) -> AnonymizationResponse:
+    """
+    Anonymisation automatique complète selon les règles de la Loi 25.
+
+    Cette endpoint analyse automatiquement le dataset, détecte les données sensibles,
+    et applique les techniques d'anonymisation appropriées sans configuration manuelle.
+
+    ## Règles d'application automatique:
+
+    **Identifiants directs:**
+    - NAS, numéros de carte de crédit: **Suppression** (colonne retirée)
+    - Email, téléphone, nom: **Masquage** (visible_chars=2)
+
+    **Données sensibles numériques:**
+    - Revenu, solde, montants: **Confidentialité différentielle** (ε=0.1, mécanisme Laplace)
+    - Données sensibles textuelles: **Généralisation** (préfixe de 3 caractères)
+
+    **Quasi-identifiants:**
+    - Dates (naissance, etc.): **Généralisation** (extraction année uniquement)
+    - Numériques (âge, code postal partiel): **Généralisation** (5 tranches/bins)
+    - Texte (ville, adresse): **Généralisation** (préfixe de 3 caractères)
+
+    ## Paramètres:
+    - **dataset_id**: UUID du dataset à anonymiser
+
+    ## Retourne:
+    - Job ID de l'opération
+    - ID du dataset anonymisé
+    - Détails des transformations appliquées
+    - Temps de traitement
+
+    ## Exemple d'utilisation:
+    ```
+    POST /api/v1/anonymization/{dataset_id}/auto-anonymize
+    ```
+
+    Aucun corps de requête requis - la détection et configuration sont automatiques.
+    """
+    try:
+        anonymizer = Anonymizer(db)
+        return await anonymizer.auto_anonymize(dataset_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors de l'anonymisation automatique: {str(e)}")
+
+
 @router.get("/{dataset_id}/download")
 async def download_dataset(
     dataset_id: UUID,

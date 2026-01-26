@@ -121,9 +121,15 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
         # Track improvements
         improved_columns = 0
 
-        # Enhance low-confidence classifications with AI
+        # Enhance classifications with AI
+        # Si OLLAMA_ANALYZE_ALL_COLUMNS est True, analyser TOUTES les colonnes
+        # Sinon, seulement les colonnes à faible confiance
         for column_name, classification in report.columns.items():
-            if classification.confidence < settings.AI_CONFIDENCE_THRESHOLD:
+            should_analyze = (
+                settings.OLLAMA_ANALYZE_ALL_COLUMNS or
+                classification.confidence < settings.AI_CONFIDENCE_THRESHOLD
+            )
+            if should_analyze:
                 logger.info(
                     f"Low confidence ({classification.confidence}%) for '{column_name}', "
                     f"using AI enhancement"
