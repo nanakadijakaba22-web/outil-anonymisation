@@ -256,7 +256,7 @@ class AnnoyAPIClient {
    */
   async autoAnonymizeDataset(datasetId: string): Promise<AnonymizationResponse> {
     const response = await fetch(
-      `${this.baseUrl}/anonymization/${datasetId}/auto-anonymize`,
+      `${this.baseUrl}/datasets/${datasetId}/auto-anonymize`,
       {
         method: "POST",
         headers: {

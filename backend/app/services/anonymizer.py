@@ -203,19 +203,19 @@ class Anonymizer:
     
 
         elif technique == AnonymizationTechnique.DIFFERENTIAL_PRIVACY:
-          # DP فقط للـ colonnes numériques
-           if column not in df.columns:
-             raise ValueError(f"Colonne introuvable: {column}")
+            # DP only for numeric columns
+            if column not in df.columns:
+                raise ValueError(f"Colonne introuvable: {column}")
 
-              # Si la colonne est texte -> DP interdit (sinon ça crash)
-             if not pd.api.types.is_numeric_dtype(df[column]):
-               raise ValueError(
-            f"Confidentialité différentielle impossible sur colonne non numérique: {column}"
-             )
+            # If column is text -> DP not allowed (would crash)
+            if not pd.api.types.is_numeric_dtype(df[column]):
+                raise ValueError(
+                    f"Confidentialité différentielle impossible sur colonne non numérique: {column}"
+                )
 
-             # IMPORTANT: _add_differential_privacy renvoie (df, metadata)
-             df, dp_metadata = self._add_differential_privacy(df, column, params)
-             params["dp_metadata"] = dp_metadata  # optionnel
+            # IMPORTANT: _add_differential_privacy returns (df, metadata)
+            df, dp_metadata = self._add_differential_privacy(df, column, params)
+            params["dp_metadata"] = dp_metadata  # optional
 
 
         # Get sample after transformations
@@ -454,7 +454,7 @@ class Anonymizer:
         df: pd.DataFrame,
         column: str,
         params: Dict[str, Any]
-    ) -> pd.DataFrame:
+    ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         """
         Differential Privacy: Add calibrated noise for formal privacy guarantees.
 
@@ -509,12 +509,20 @@ class Anonymizer:
         Cette méthode exécute d'abord une détection des données sensibles, puis applique
         automatiquement les techniques d'anonymisation appropriées selon les règles suivantes:
 
-        Règles d'application:
-        - Identifiants directs: SUPPRESSION (NAS, cartes) ou MASKING (email, téléphone, nom)
-        - Données sensibles numériques: DIFFERENTIAL_PRIVACY (epsilon=0.1, mechanism=laplace)
-        - Quasi-identifiants dates: GENERALIZATION (mode=year)
-        - Quasi-identifiants numériques: GENERALIZATION (mode=bins, bins=5)
-        - Quasi-identifiants texte/postal: GENERALIZATION (mode=prefix, prefix_length=3)
+        RÈGLES D'ANONYMISATION 100% AUTOMATIQUES (l'utilisateur ne choisit rien):
+
+        1. IDENTIFIANTS DIRECTS → SUPPRESSION (suppression complète de la colonne)
+           - NAS, SSN, email, téléphone, nom, prénom, carte de crédit, etc.
+           - TOUS les identifiants directs sont supprimés, sans exception
+
+        2. DONNÉES SENSIBLES → Selon le type de données:
+           - Colonnes NUMÉRIQUES: DIFFERENTIAL_PRIVACY (epsilon=0.1, mechanism=laplace)
+           - Colonnes NON-NUMÉRIQUES: GENERALIZATION (prefix_length=3)
+
+        3. QUASI-IDENTIFIANTS → GENERALIZATION selon le type:
+           - Colonnes DATE/DATETIME: mode "year" (extrait l'année uniquement)
+           - Colonnes NUMÉRIQUES: mode "bins" (divise en 5 tranches)
+           - Colonnes TEXTE: mode "prefix" (garde les 3 premiers caractères)
 
         Args:
             dataset_id: UUID of the dataset to auto-anonymize
@@ -538,85 +546,123 @@ class Anonymizer:
         for column_name, classification in detection_report.columns.items():
             config = None
 
-            # Get pattern type from justification if available
-            pattern_type = None
-            if "NAS" in classification.justification.upper():
-                pattern_type = "NAS"
-            elif "CARTE" in classification.justification.upper() or "CREDIT" in classification.justification.upper():
-                pattern_type = "CREDIT_CARD"
-
+            # =========================================================================
+            # RÈGLE 1: IDENTIFIANTS DIRECTS → SUPPRESSION (toujours, sans exception)
+            # =========================================================================
             if classification.sensitivity_type.value == "direct_identifier":
-                # NAS et cartes: SUPPRESSION, autres: MASKING
-                if pattern_type in ["NAS", "CREDIT_CARD", "SSN"]:
-                    config = AnonymizationConfig(
-                        column_name=column_name,
-                        technique=AnonymizationTechnique.SUPPRESSION,
-                        params={}
-                    )
-                else:
-                    config = AnonymizationConfig(
-                        column_name=column_name,
-                        technique=AnonymizationTechnique.MASKING,
-                        params={"visible_chars": 2}
-                    )
+                # TOUS les identifiants directs sont SUPPRIMÉS (colonne retirée)
+                # Cela inclut: NAS, SSN, email, téléphone, nom, prénom, carte de crédit, etc.
+                config = AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.SUPPRESSION,
+                    params={}
+                )
+                logger.info(
+                    f"Identifiant direct '{column_name}' → SUPPRESSION "
+                    f"(justification: {classification.justification})"
+                )
 
+            # =========================================================================
+            # RÈGLE 2: DONNÉES SENSIBLES → DP (numérique) ou GENERALIZATION (texte)
+            # =========================================================================
             elif classification.sensitivity_type.value == "sensitive":
-                # Données sensibles: DP si numérique, sinon généralisation
                 if column_name in df.columns and pd.api.types.is_numeric_dtype(df[column_name]):
+                    # Données sensibles NUMÉRIQUES: Confidentialité différentielle
+                    # epsilon=0.1 = protection FORTE (très bruité mais très privé)
                     config = AnonymizationConfig(
                         column_name=column_name,
                         technique=AnonymizationTechnique.DIFFERENTIAL_PRIVACY,
                         params={"epsilon": 0.1, "mechanism": "laplace"}
                     )
+                    logger.info(
+                        f"Donnée sensible numérique '{column_name}' → DIFFERENTIAL_PRIVACY "
+                        f"(epsilon=0.1, mechanism=laplace)"
+                    )
                 else:
+                    # Données sensibles NON-NUMÉRIQUES: Généralisation par préfixe
                     config = AnonymizationConfig(
                         column_name=column_name,
                         technique=AnonymizationTechnique.GENERALIZATION,
-                        params={"mode": "prefix", "prefix_length": 3}
+                        params={"prefix_length": 3}
+                    )
+                    logger.info(
+                        f"Donnée sensible texte '{column_name}' → GENERALIZATION "
+                        f"(prefix_length=3)"
                     )
 
+            # =========================================================================
+            # RÈGLE 3: QUASI-IDENTIFIANTS → GENERALIZATION selon le type de données
+            # =========================================================================
             elif classification.sensitivity_type.value == "quasi_identifier":
-                # Quasi-identifiants: selon le type de données
                 if column_name in df.columns:
                     col_data = df[column_name]
 
-                    # Check if date type
+                    # 3a. Colonnes DATE/DATETIME → Généralisation par année
                     if pd.api.types.is_datetime64_any_dtype(col_data):
                         config = AnonymizationConfig(
                             column_name=column_name,
                             technique=AnonymizationTechnique.GENERALIZATION,
                             params={"mode": "year"}
                         )
-                    # Try to detect date strings
-                    elif col_data.dtype == "object":
+                        logger.info(
+                            f"Quasi-identifiant date '{column_name}' → GENERALIZATION (mode=year)"
+                        )
+
+                    # 3b. Détecter les dates sous forme de texte
+                    elif col_data.dtype == "object" or pd.api.types.is_string_dtype(col_data):
                         sample = col_data.dropna().head(10)
-                        try:
-                            date_conversion = pd.to_datetime(sample, errors="coerce")
-                            if date_conversion.notna().sum() / len(sample) >= 0.7:
-                                config = AnonymizationConfig(
-                                    column_name=column_name,
-                                    technique=AnonymizationTechnique.GENERALIZATION,
-                                    params={"mode": "year"}
-                                )
-                        except (ValueError, TypeError):
-                            pass
+                        is_date_string = False
+                        if len(sample) > 0:
+                            try:
+                                date_conversion = pd.to_datetime(sample, errors="coerce")
+                                if date_conversion.notna().sum() / len(sample) >= 0.7:
+                                    is_date_string = True
+                            except (ValueError, TypeError):
+                                pass
 
-                    # Numeric quasi-identifiers
-                    if config is None and pd.api.types.is_numeric_dtype(col_data):
+                        if is_date_string:
+                            config = AnonymizationConfig(
+                                column_name=column_name,
+                                technique=AnonymizationTechnique.GENERALIZATION,
+                                params={"mode": "year"}
+                            )
+                            logger.info(
+                                f"Quasi-identifiant date (texte) '{column_name}' → GENERALIZATION (mode=year)"
+                            )
+                        else:
+                            # 3c. Colonnes TEXTE → Généralisation par préfixe
+                            config = AnonymizationConfig(
+                                column_name=column_name,
+                                technique=AnonymizationTechnique.GENERALIZATION,
+                                params={"prefix_length": 3}
+                            )
+                            logger.info(
+                                f"Quasi-identifiant texte '{column_name}' → GENERALIZATION (prefix_length=3)"
+                            )
+
+                    # 3d. Colonnes NUMÉRIQUES → Généralisation par tranches (bins)
+                    elif pd.api.types.is_numeric_dtype(col_data):
                         config = AnonymizationConfig(
                             column_name=column_name,
                             technique=AnonymizationTechnique.GENERALIZATION,
-                            params={"mode": "bins", "bins": 5}
+                            params={"bins": 5}
+                        )
+                        logger.info(
+                            f"Quasi-identifiant numérique '{column_name}' → GENERALIZATION (bins=5)"
                         )
 
-                    # Text/postal codes -> prefix
-                    if config is None:
+                    # 3e. Fallback: tout autre type → Généralisation par préfixe
+                    else:
                         config = AnonymizationConfig(
                             column_name=column_name,
                             technique=AnonymizationTechnique.GENERALIZATION,
-                            params={"mode": "prefix", "prefix_length": 3}
+                            params={"prefix_length": 3}
+                        )
+                        logger.info(
+                            f"Quasi-identifiant (autre) '{column_name}' → GENERALIZATION (prefix_length=3)"
                         )
 
+            # Ajouter la configuration si définie
             if config:
                 configs.append(config)
                 applied_techniques[column_name] = {

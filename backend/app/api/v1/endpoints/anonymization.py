@@ -94,17 +94,18 @@ async def auto_anonymize_dataset(
 
     ## Règles d'application automatique:
 
-    **Identifiants directs:**
-    - NAS, numéros de carte de crédit: **Suppression** (colonne retirée)
-    - Email, téléphone, nom: **Masquage** (visible_chars=2)
+    **Identifiants directs (TOUS supprimés):**
+    - NAS, SSN, numéros de carte de crédit: **Suppression** (colonne retirée)
+    - Email, téléphone, nom: **Suppression** (colonne retirée)
+    - Tous les identifiants directs sont supprimés pour conformité maximale
 
-    **Données sensibles numériques:**
-    - Revenu, solde, montants: **Confidentialité différentielle** (ε=0.1, mécanisme Laplace)
-    - Données sensibles textuelles: **Généralisation** (préfixe de 3 caractères)
+    **Données sensibles:**
+    - Numériques (revenu, solde, montants): **Confidentialité différentielle** (ε=0.1, mécanisme Laplace)
+    - Non-numériques (texte sensible): **Généralisation** (prefix_length=3)
 
     **Quasi-identifiants:**
     - Dates (naissance, etc.): **Généralisation** (extraction année uniquement)
-    - Numériques (âge, code postal partiel): **Généralisation** (5 tranches/bins)
+    - Numériques (âge, code postal partiel): **Généralisation** (5 bins)
     - Texte (ville, adresse): **Généralisation** (préfixe de 3 caractères)
 
     ## Paramètres:

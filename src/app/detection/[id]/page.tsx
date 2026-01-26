@@ -302,12 +302,12 @@ export default function DetectionPage() {
             </svg>
             <div>
               <h3 className="text-sm font-semibold text-blue-900 mb-1">
-                Validation manuelle requise
+                Anonymisation automatique
               </h3>
               <p className="text-sm text-blue-800">
-                Vérifiez et ajustez la classification de chaque colonne ci-dessous.
-                Vous pouvez modifier le type de sensibilité et la catégorie selon votre
-                connaissance métier. Cette validation est importante pour la conformité à la Loi 25.
+                Vérifiez la classification des colonnes ci-dessous. Vous pouvez ajuster le type de sensibilité
+                et la catégorie si nécessaire. Cliquez sur "Anonymiser automatiquement" pour appliquer
+                les techniques optimales selon la Loi 25 du Québec.
               </p>
             </div>
           </div>
@@ -447,15 +447,16 @@ export default function DetectionPage() {
         <div className="flex gap-4 justify-center">
           <button
             onClick={() => router.push('/')}
-            className="py-3 px-8 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-all"
+            disabled={isAutoAnonymizing}
+            className="py-3 px-8 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Nouveau fichier
           </button>
           <button
             onClick={handleReset}
-            disabled={!hasChanges}
+            disabled={!hasChanges || isAutoAnonymizing}
             className={`py-3 px-8 rounded-lg font-semibold transition-all ${
-              hasChanges
+              hasChanges && !isAutoAnonymizing
                 ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-2 border-yellow-300'
                 : 'bg-gray-100 text-gray-400 cursor-not-allowed'
             }`}
@@ -463,20 +464,25 @@ export default function DetectionPage() {
             Réinitialiser
           </button>
           <button
-            onClick={handleSaveAndContinue}
-            disabled={saving}
+            onClick={handleAutoAnonymize}
+            disabled={isAutoAnonymizing || saving}
             className="py-3 px-8 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {saving ? (
+            {isAutoAnonymizing ? (
               <span className="flex items-center">
                 <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Sauvegarde...
+                Anonymisation en cours...
               </span>
             ) : (
-              hasChanges ? 'Sauvegarder et continuer →' : 'Continuer →'
+              <span className="flex items-center">
+                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Anonymiser automatiquement
+              </span>
             )}
           </button>
         </div>

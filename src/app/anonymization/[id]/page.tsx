@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { api } from "@/lib/api";
-import type { DetectionReport, Dataset, AnonymizationConfig } from "@/lib/api";
+import type { DetectionReport, Dataset, AnonymizationResponse } from "@/lib/api";
 import {
   getSensitivityColor,
   formatSensitivityType,
@@ -14,17 +14,74 @@ import ProgressBadge from "@/components/ProgressBadge";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Header from "@/components/Header";
 
-type TechniqueType =
-  | "masking"
-  | "generalization"
-  | "suppression"
-  | "differential_privacy";
-
-interface ColumnConfig {
+interface TechniquePreview {
   column_name: string;
-  technique: TechniqueType;
-  params: Record<string, any>;
   sensitivity_type: string;
+  technique: string;
+  description: string;
+}
+
+// Map sensitivity types to automatic technique recommendations
+function getAutomaticTechnique(sensitivityType: string, columnName: string, category?: string): TechniquePreview {
+  const lowerName = columnName.toLowerCase();
+
+  switch (sensitivityType) {
+    case 'direct_identifier':
+      if (lowerName.includes('nas') || lowerName.includes('ssn') || lowerName.includes('carte')) {
+        return {
+          column_name: columnName,
+          sensitivity_type: sensitivityType,
+          technique: 'suppression',
+          description: 'Colonne completement supprimee (donnee ultra-sensible)'
+        };
+      }
+      return {
+        column_name: columnName,
+        sensitivity_type: sensitivityType,
+        technique: 'masking',
+        description: 'Masquage avec 2 caracteres visibles (ex: je**@te**.com)'
+      };
+
+    case 'quasi_identifier':
+      if (lowerName.includes('date') || lowerName.includes('naissance')) {
+        return {
+          column_name: columnName,
+          sensitivity_type: sensitivityType,
+          technique: 'generalization',
+          description: 'Generalisation a l\'annee uniquement'
+        };
+      }
+      return {
+        column_name: columnName,
+        sensitivity_type: sensitivityType,
+        technique: 'generalization',
+        description: 'Generalisation en 5 tranches ou prefixe'
+      };
+
+    case 'sensitive':
+      if (category === 'financial' || lowerName.includes('revenu') || lowerName.includes('solde') || lowerName.includes('montant')) {
+        return {
+          column_name: columnName,
+          sensitivity_type: sensitivityType,
+          technique: 'differential_privacy',
+          description: 'Confidentialite differentielle (epsilon=0.1, Laplace)'
+        };
+      }
+      return {
+        column_name: columnName,
+        sensitivity_type: sensitivityType,
+        technique: 'generalization',
+        description: 'Generalisation en prefixe de 3 caracteres'
+      };
+
+    default:
+      return {
+        column_name: columnName,
+        sensitivity_type: sensitivityType,
+        technique: 'none',
+        description: 'Aucune transformation (donnee non-sensible)'
+      };
+  }
 }
 
 export default function AnonymizationPage() {
@@ -34,10 +91,12 @@ export default function AnonymizationPage() {
 
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [report, setReport] = useState<DetectionReport | null>(null);
-  const [configs, setConfigs] = useState<Record<string, ColumnConfig>>({});
+  const [techniquesPreviews, setTechniquesPreviews] = useState<TechniquePreview[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [autoStarted, setAutoStarted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [anonymizationResult, setAnonymizationResult] = useState<AnonymizationResponse | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -53,59 +112,23 @@ export default function AnonymizationPage() {
         setDataset(datasetData);
         setReport(detectionReport);
 
-        // Initialize configs with recommended techniques
-        const initialConfigs: Record<string, ColumnConfig> = {};
+        // Build technique previews for display
+        const previews: TechniquePreview[] = [];
         Object.entries(detectionReport.columns).forEach(
           ([columnName, classification]) => {
-            // Only configure columns that need anonymization
-            if (
-              classification.sensitivity_type === "direct_identifier" ||
-              classification.sensitivity_type === "quasi_identifier" ||
-              classification.sensitivity_type === "sensitive"
-            ) {
-              // Recommend technique based on sensitivity and category
-              let technique: TechniqueType = "masking";
-              let params: Record<string, any> = {};
-
-              // Use backend suggestion if available
-              if (classification.suggested_config) {
-                technique = classification.suggested_config.technique;
-                params = classification.suggested_config.params;
-              }
-              // Fallback logic
-              else if (
-                classification.sensitivity_type === "direct_identifier"
-              ) {
-                if (classification.category === "personal") {
-                  // NAS, email, phone -> suppression or masking
-                  if (columnName.toLowerCase().includes("nas")) {
-                    technique = "suppression";
-                  } else {
-                    technique = "masking";
-                    params = { visible_chars: 2 };
-                  }
-                } else {
-                  technique = "differential_privacy";
-                  params = { epsilon: 1.0, mechanism: "laplace" };
-                }
-              } else if (
-                classification.sensitivity_type === "quasi_identifier"
-              ) {
-                technique = "generalization";
-                params = { mode: "bins", bins: 5 };
-              }
-
-              initialConfigs[columnName] = {
-                column_name: columnName,
-                technique,
-                params,
-                sensitivity_type: classification.sensitivity_type,
-              };
+            if (classification.sensitivity_type !== 'non_sensitive') {
+              previews.push(
+                getAutomaticTechnique(
+                  classification.sensitivity_type,
+                  columnName,
+                  classification.category
+                )
+              );
             }
           },
         );
 
-        setConfigs(initialConfigs);
+        setTechniquesPreviews(previews);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Erreur lors du chargement",
@@ -118,78 +141,21 @@ export default function AnonymizationPage() {
     loadData();
   }, [datasetId]);
 
-  const updateTechnique = (columnName: string, technique: TechniqueType) => {
-    setConfigs((prev) => {
-      const updated = { ...prev };
-      updated[columnName] = {
-        ...updated[columnName],
-        technique,
-        params: getDefaultParams(technique, columnName),
-      };
-      return updated;
-    });
-  };
-
-  const updateParam = (columnName: string, paramName: string, value: any) => {
-    setConfigs((prev) => {
-      const updated = { ...prev };
-      updated[columnName] = {
-        ...updated[columnName],
-        params: {
-          ...updated[columnName].params,
-          [paramName]: value,
-        },
-      };
-      return updated;
-    });
-  };
-
-  const getDefaultParams = (
-    technique: TechniqueType,
-    columnName?: string,
-  ): Record<string, any> => {
-    // If backend suggestion matches the requested technique, use it
-    if (
-      columnName &&
-      report?.columns[columnName]?.suggested_config?.technique === technique
-    ) {
-      return report.columns[columnName].suggested_config!.params;
+  // Auto-start anonymization when page loads
+  useEffect(() => {
+    if (!loading && !autoStarted && report && !error) {
+      setAutoStarted(true);
+      handleAutoAnonymize();
     }
+  }, [loading, autoStarted, report, error]);
 
-    switch (technique) {
-      case "masking":
-        return { visible_chars: 2 };
-      case "generalization":
-        return { mode: "bins", bins: 5 };
-      case "suppression":
-        return {};
-      case "differential_privacy":
-        return { epsilon: 1.0, delta: 1e-5, mechanism: "gaussian" };
-      default:
-        return {};
-    }
-  };
-
-  const handleAnonymize = async () => {
+  const handleAutoAnonymize = async () => {
     try {
       setProcessing(true);
       setError(null);
 
-      const configArray: AnonymizationConfig[] = Object.values(configs).map(
-        (config) => {
-          // Nettoyer les params: enlever 'mode' car le backend ne l'utilise pas
-          const cleanParams = { ...config.params };
-          delete cleanParams.mode;
-
-          return {
-            column_name: config.column_name,
-            technique: config.technique,
-            params: cleanParams,
-          };
-        },
-      );
-
-      const response = await api.anonymizeDataset(datasetId, configArray);
+      const response = await api.autoAnonymizeDataset(datasetId);
+      setAnonymizationResult(response);
 
       // Navigate to results page with the anonymized dataset ID
       router.push(`/results/${response.anonymized_dataset_id}`);
@@ -237,12 +203,20 @@ export default function AnonymizationPage() {
             Erreur
           </h2>
           <p className="text-gray-600 text-center mb-4">{error}</p>
-          <button
-            onClick={() => router.push("/")}
-            className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Retour à l'accueil
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.push("/")}
+              className="flex-1 py-2 px-4 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+            >
+              Retour a l'accueil
+            </button>
+            <button
+              onClick={handleAutoAnonymize}
+              className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Reessayer
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -251,8 +225,6 @@ export default function AnonymizationPage() {
   if (!report || !dataset) {
     return null;
   }
-
-  const configEntries = Object.entries(configs);
 
   return (
     <ProtectedRoute>
@@ -268,11 +240,11 @@ export default function AnonymizationPage() {
           {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              Configuration de l'Anonymisation
+              {processing ? "Anonymisation en cours..." : "Anonymisation automatique"}
             </h1>
             <p className="text-lg text-gray-600">{dataset.filename}</p>
             <p className="text-sm text-gray-500">
-              {configEntries.length} colonnes à anonymiser
+              {techniquesPreviews.length} colonnes a anonymiser
             </p>
           </div>
 
@@ -283,334 +255,132 @@ export default function AnonymizationPage() {
             completedSteps={["upload", "detection"]}
           />
 
-          {/* Info Banner */}
-          <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-8">
-            <div className="flex items-start">
-              <svg
-                className="w-6 h-6 text-blue-600 mr-3 flex-shrink-0 mt-0.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <div>
-                <h3 className="font-semibold text-blue-900 mb-1">
-                  Techniques d'anonymisation recommandées
-                </h3>
-                <p className="text-sm text-blue-800">
-                  Les techniques ont été pré-sélectionnées en fonction du type
-                  de données. Vous pouvez les ajuster selon vos besoins.
+          {/* Processing Animation */}
+          {processing && (
+            <div className="bg-white rounded-xl shadow-lg p-12 mb-8">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-20 w-20 border-4 border-blue-200 border-t-blue-600 mb-6"></div>
+                <h2 className="text-2xl font-semibold text-gray-800 mb-2">
+                  Application des techniques d'anonymisation
+                </h2>
+                <p className="text-gray-600">
+                  Les donnees sensibles sont en cours de protection selon les regles de la Loi 25...
                 </p>
               </div>
             </div>
-          </div>
-
-          {/* Configuration Cards */}
-          <div className="space-y-6 mb-8">
-            {configEntries.map(([columnName, config]) => {
-              const colors = getSensitivityColor(config.sensitivity_type);
-              return (
-                <div
-                  key={columnName}
-                  className="bg-white rounded-lg shadow-lg p-6"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-800">
-                        {columnName}
-                      </h3>
-                      <span
-                        className={`inline-block mt-1 px-3 py-1 rounded-full text-sm font-medium ${colors.bg} ${colors.text} border ${colors.border}`}
-                      >
-                        {formatSensitivityType(config.sensitivity_type)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Technique Selector */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Technique d'anonymisation
-                    </label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {(
-                        [
-                          "masking",
-                          "generalization",
-                          "suppression",
-                          "differential_privacy",
-                        ] as TechniqueType[]
-                      ).map((tech) => (
-                        <button
-                          key={tech}
-                          onClick={() => updateTechnique(columnName, tech)}
-                          className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                            config.technique === tech
-                              ? "border-blue-500 bg-blue-50 text-blue-700"
-                              : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
-                          }`}
-                        >
-                          {formatTechnique(tech)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Parameters */}
-                  {config.technique === "masking" && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Caractères visibles
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="10"
-                        value={config.params.visible_chars || 2}
-                        onChange={(e) =>
-                          updateParam(
-                            columnName,
-                            "visible_chars",
-                            parseInt(e.target.value),
-                          )
-                        }
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                      <p className="text-sm text-gray-500 mt-1">
-                        Exemple: jean@test.com → je**@te**.com
-                      </p>
-                    </div>
-                  )}
-
-                  {config.technique === "generalization" && (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Mode de généralisation
-                        </label>
-                        <select
-                          value={config.params.mode || "bins"}
-                          onChange={(e) => {
-                            const mode = e.target.value;
-                            const newParams: Record<string, any> = { mode };
-
-                            // Définir les paramètres par défaut selon le mode
-                            if (mode === "bins") {
-                              newParams.bins = 5;
-                            } else if (mode === "prefix") {
-                              newParams.prefix_length = 3;
-                            }
-                            // mode 'year' ne nécessite pas de params supplémentaires
-
-                            setConfigs((prev) => ({
-                              ...prev,
-                              [columnName]: {
-                                ...prev[columnName],
-                                params: newParams,
-                              },
-                            }));
-                          }}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="bins">Tranches (numérique)</option>
-                          <option value="prefix">
-                            Préfixe (texte/code postal)
-                          </option>
-                          <option value="year">Année (dates)</option>
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Mode automatiquement sélectionné selon le type de
-                          données
-                        </p>
-                      </div>
-
-                      {/* Paramètres pour mode bins */}
-                      {config.params.mode === "bins" && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Nombre de tranches
-                          </label>
-                          <input
-                            type="number"
-                            min="2"
-                            max="10"
-                            value={config.params.bins || 5}
-                            onChange={(e) =>
-                              updateParam(
-                                columnName,
-                                "bins",
-                                parseInt(e.target.value),
-                              )
-                            }
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                          <p className="text-sm text-gray-500 mt-1">
-                            Exemple: 75000 → "(50000, 100000]"
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Paramètres pour mode prefix */}
-                      {config.params.mode === "prefix" && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Longueur du préfixe
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="6"
-                            value={config.params.prefix_length || 3}
-                            onChange={(e) =>
-                              updateParam(
-                                columnName,
-                                "prefix_length",
-                                parseInt(e.target.value),
-                              )
-                            }
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                          <p className="text-sm text-gray-500 mt-1">
-                            Exemple: "Montreal" → "Mon ***"
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Info pour mode year */}
-                      {config.params.mode === "year" && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                          <p className="text-sm text-blue-800">
-                            Les dates seront généralisées à l'année uniquement.
-                            <br />
-                            Exemple: "2021-08-22" → 2021
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {config.technique === "differential_privacy" && (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Epsilon (ε)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          min="0.1"
-                          value={config.params.epsilon ?? 1.0}
-                          onChange={(e) =>
-                            updateParam(
-                              columnName,
-                              "epsilon",
-                              parseFloat(e.target.value),
-                            )
-                          }
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                        <p className="text-sm text-gray-500 mt-1">
-                          Plus ε est petit, plus c’est privé (mais plus de
-                          bruit).
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Mécanisme
-                        </label>
-                        <select
-                          value={config.params.mechanism ?? "laplace"}
-                          onChange={(e) =>
-                            updateParam(columnName, "mechanism", e.target.value)
-                          }
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                        >
-                          <option value="laplace">Laplace</option>
-                          <option value="gaussian">Gaussian</option>
-                        </select>
-                      </div>
-
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                        <p className="text-sm text-yellow-800">
-                          <strong>Note :</strong> la confidentialité
-                          différentielle s’applique surtout aux colonnes
-                          numériques. Pour texte (nom, email), préfère
-                          suppression/masquage.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {config.technique === "suppression" && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                      <p className="text-sm text-red-800">
-                        <strong>Attention:</strong> Cette colonne sera
-                        complètement supprimée du dataset anonymisé.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex gap-4 justify-center">
-            <button
-              onClick={() => router.push(`/detection/${datasetId}`)}
-              disabled={processing}
-              className="py-3 px-8 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Retour à la détection
-            </button>
-            <button
-              onClick={handleAnonymize}
-              disabled={processing || configEntries.length === 0}
-              className="py-3 px-8 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {processing ? (
-                <span className="flex items-center">
+          {/* Technique Preview Cards */}
+          {!processing && (
+            <>
+              {/* Info Banner */}
+              <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mb-8">
+                <div className="flex items-start">
                   <svg
-                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
+                    className="w-6 h-6 text-green-600 mr-3 flex-shrink-0 mt-0.5"
                     fill="none"
                     viewBox="0 0 24 24"
+                    stroke="currentColor"
                   >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
                     <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
                   </svg>
-                  Anonymisation en cours...
-                </span>
-              ) : (
-                "Lancer l'anonymisation"
-              )}
-            </button>
-          </div>
+                  <div>
+                    <h3 className="font-semibold text-green-900 mb-1">
+                      Techniques selectionnees automatiquement
+                    </h3>
+                    <p className="text-sm text-green-800">
+                      Les techniques d'anonymisation optimales ont ete choisies automatiquement
+                      en fonction du type de donnees detecte. L'anonymisation demarrera automatiquement.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Techniques Table */}
+              <div className="bg-white rounded-lg shadow-xl overflow-hidden mb-8">
+                <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                  <h2 className="text-xl font-semibold text-gray-800">
+                    Techniques a appliquer ({techniquesPreviews.length})
+                  </h2>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Colonne
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Type
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Technique
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Description
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {techniquesPreviews.map((preview) => {
+                        const colors = getSensitivityColor(preview.sensitivity_type);
+                        return (
+                          <tr key={preview.column_name} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="font-medium text-gray-900">{preview.column_name}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span
+                                className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${colors.bg} ${colors.text} border ${colors.border}`}
+                              >
+                                {formatSensitivityType(preview.sensitivity_type)}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="inline-block px-3 py-1 rounded-lg text-sm font-medium bg-blue-100 text-blue-800">
+                                {formatTechnique(preview.technique)}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <p className="text-sm text-gray-700">{preview.description}</p>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-4 justify-center">
+                <button
+                  onClick={() => router.push(`/detection/${datasetId}`)}
+                  className="py-3 px-8 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-all"
+                >
+                  Retour a la detection
+                </button>
+                <button
+                  onClick={handleAutoAnonymize}
+                  disabled={processing}
+                  className="py-3 px-8 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="flex items-center">
+                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    Lancer l'anonymisation
+                  </span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </ProtectedRoute>

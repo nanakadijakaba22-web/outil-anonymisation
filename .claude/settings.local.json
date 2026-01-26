@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(timeout 60 tail:*)",
-      "Bash(python -m py_compile:*)"
+      "Bash(python -m py_compile:*)",
+      "Bash(npm run lint)",
+      "Bash(npm install)",
+      "Bash(timeout 30 npm run dev)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(curl:*)",
+      "Bash(docker-compose logs:*)"
     ]
   }
 }
