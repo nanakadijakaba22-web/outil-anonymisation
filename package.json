@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
+    "dev:port": "next dev --webpack -p 3000",
+    "dev:turbo": "next dev --turbo",
+    "clean": "rm -rf .next node_modules/.cache || echo Clean done",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

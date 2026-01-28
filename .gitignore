@@ -62,3 +62,18 @@ build/
 *.docx
 *.doc
 *.pdf
+
+# Windows specific
+nul
+NUL
+Thumbs.db
+Desktop.ini
+
+# Temporary upload folders
+.tmp.driveupload/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

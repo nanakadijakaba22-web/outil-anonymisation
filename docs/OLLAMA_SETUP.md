@@ -36,13 +36,13 @@ Ce guide vous accompagne dans l'installation et la configuration d'Ollama pour a
 
 **Minimum**:
 - CPU: Intel i5 / AMD Ryzen 5 ou équivalent
-- RAM: **8 GB** (pour llama3.1:8b)
-- Disque: 10 GB libres
+- RAM: **4 GB** (pour gemma3:4b)
+- Disque: 5 GB libres
 
 **Recommandé**:
 - CPU: Apple Silicon (M1/M2/M3) / Intel i7 / AMD Ryzen 7
-- RAM: **16 GB**
-- Disque: 20 GB libres
+- RAM: **8 GB**
+- Disque: 10 GB libres
 - GPU: NVIDIA/AMD (optionnel, pour accélération)
 
 ---
@@ -138,27 +138,25 @@ docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 --name ollama ol
 
 ## Installation du modèle
 
-### Llama 3.1 8B (Recommandé)
+### Gemma 3 4B (Recommandé)
 
 ```bash
 # Télécharger le modèle
-ollama pull llama3.1:8b
+ollama pull gemma3:4b
 ```
 
 **Progression**:
 ```
 pulling manifest
-pulling 8eeb52dfb3bb... 100% ▕████████████████▏ 4.7 GB
-pulling 73b313b5552d... 100% ▕████████████████▏  11 KB
-pulling 0ba8f0e314b4... 100% ▕████████████████▏  12 KB
-pulling 56bb8bd477a5... 100% ▕████████████████▏  96 B
-pulling 1a4c3c319823... 100% ▕████████████████▏ 485 B
+pulling xxxxxxxx... 100% ▕████████████████▏ 3.3 GB
+pulling xxxxxxxx... 100% ▕████████████████▏  11 KB
+pulling xxxxxxxx... 100% ▕████████████████▏  12 KB
 verifying sha256 digest
 writing manifest
 success
 ```
 
-**Temps de téléchargement**: 5-15 minutes (selon connexion Internet)
+**Temps de téléchargement**: 3-10 minutes (selon connexion Internet)
 
 **Vérifier l'installation**:
 ```bash
@@ -168,10 +166,10 @@ ollama list
 **Output attendu**:
 ```
 NAME              ID              SIZE    MODIFIED
-llama3.1:8b       8eeb52dfb3bb    4.7 GB  5 minutes ago
+gemma3:4b         xxxxxxxx        3.3 GB  5 minutes ago
 ```
 
-### Alternatives (machines moins puissantes)
+### Alternatives
 
 **Llama 3.2 3B** (pour RAM limitée):
 ```bash
@@ -179,15 +177,15 @@ ollama pull llama3.2:3b
 ```
 - Taille: 2 GB
 - RAM: 4 GB minimum
-- Précision: Légèrement inférieure à 8B
+- Bon compromis taille/performance
 
-**Mistral 7B**:
+**Llama 3.1 8B** (pour plus de precision):
 ```bash
-ollama pull mistral:7b
+ollama pull llama3.1:8b
 ```
-- Taille: 4.1 GB
-- RAM: 8 GB
-- Précision: Comparable à Llama 3.1 8B
+- Taille: 4.7 GB
+- RAM: 8 GB minimum
+- Meilleure precision, plus lent
 
 ---
 
@@ -200,7 +198,7 @@ ollama pull mistral:7b
 ```bash
 # Ollama Configuration
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.1:8b
+OLLAMA_MODEL=gemma3:4b
 
 # AI Detection Settings
 ENABLE_AI_DETECTION=true
@@ -257,7 +255,7 @@ curl http://localhost:11434/api/tags
 curl -X POST http://localhost:11434/api/generate \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "llama3.1:8b",
+    "model": "gemma3:4b",
     "prompt": "Classify this column: email_address",
     "stream": false
   }'
@@ -287,7 +285,7 @@ docker-compose logs backend | grep -i ollama
 
 **Output attendu**:
 ```
-INFO - Ollama AI detection initialized successfully (model: llama3.1:8b)
+INFO - Ollama AI detection initialized successfully (model: gemma3:4b)
 INFO - AI improved classification for 3 columns
 ```
 
@@ -302,7 +300,7 @@ curl http://localhost:8000/api/v1/health
 {
   "status": "healthy",
   "ai_detection_enabled": true,
-  "ollama_model": "llama3.1:8b",
+  "ollama_model": "gemma3:4b",
   "ollama_available": true
 }
 ```
@@ -348,7 +346,7 @@ lsof -i :11434
 
 **Symptômes**:
 ```
-ERROR - Model llama3.1:8b not found
+ERROR - Model gemma3:4b not found
 ```
 
 **Solutions**:
@@ -358,7 +356,7 @@ ERROR - Model llama3.1:8b not found
 ollama list
 
 # Télécharger le modèle manquant
-ollama pull llama3.1:8b
+ollama pull gemma3:4b
 ```
 
 ### Problème 3: Docker ne peut pas accéder à Ollama
@@ -397,6 +395,7 @@ curl http://host.docker.internal:11434/api/tags
 ```bash
 ollama pull llama3.2:3b
 # Mettre à jour .env: OLLAMA_MODEL=llama3.2:3b
+# Note: gemma3:4b est déjà un modèle léger et performant
 ```
 
 2. **Augmenter RAM allouée (Docker)**:
@@ -466,7 +465,7 @@ ENABLE_AI_DETECTION=true
 **Après (Ollama)**:
 ```bash
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.1:8b
+OLLAMA_MODEL=gemma3:4b
 ENABLE_AI_DETECTION=true
 ```
 
@@ -508,7 +507,7 @@ docker-compose logs backend | grep -E "(Ollama|ollama)"
 **Output attendu**:
 ```
 INFO - Ollama AI detection initialized successfully
-INFO - Using model: llama3.1:8b
+INFO - Using model: gemma3:4b
 ```
 
 ---
