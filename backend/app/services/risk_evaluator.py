@@ -54,14 +54,14 @@ class RiskEvaluator:
     # Minimum residual risk thresholds (never below these values)
     # IMPORTANT: These values must be low enough to allow properly anonymized
     # datasets to achieve compliance (< 20% overall score)
-    MINIMUM_RESIDUAL_RISK = 0.01  # 0.01% baseline (symbolic minimum)
+    MINIMUM_RESIDUAL_RISK = 0.1   # 0.1% baseline (minimum visible in UI)
     BASE_RESIDUAL_RISK = {
-        "suppressed_quasi_ids": 0.05,    # Very low - proper suppression is effective
-        "no_direct_ids": 0.03,
-        "generalized_data": 0.08,
-        "pseudonymized_data": 0.12,      # Higher due to hash vulnerability
-        "k_anonymity": 0.02,
-        "no_numeric_columns": 0.01,      # Metadata inference still possible
+        "suppressed_quasi_ids": 0.5,    # Proper suppression is effective but risk remains
+        "no_direct_ids": 0.3,
+        "generalized_data": 1.0,         # Generalization has higher residual risk
+        "differential_privacy": 0.5,     # Mathematical guarantee but epsilon-dependent
+        "k_anonymity": 0.5,              # Residual risk even with high k
+        "no_numeric_columns": 0.1,       # Metadata inference still possible
     }
 
     def __init__(self, db: Session):
@@ -187,11 +187,30 @@ class RiskEvaluator:
                 k_value, k_violations = self._calculate_k_anonymity(df, valid_qids)
 
         # Calculate overall score (weighted average)
-        overall_score = (
+        overall_score_raw = (
             individualization.score * 0.40 +  # 40% weight
             correlation.score * 0.35 +         # 35% weight
             inference.score * 0.25             # 25% weight
         )
+
+        # Apply minimum residual risk threshold to overall score
+        # Even perfect anonymization has residual risk (Machanavajjhala et al. 2007)
+        # Check if differential privacy was applied to any column
+        context = "default"
+        if dataset.is_anonymized:
+            # Check for DP in transformation logs
+            from app.models.database import TransformationLog, AnonymizationJob
+            has_dp = self.db.query(TransformationLog).join(AnonymizationJob).filter(
+                AnonymizationJob.output_dataset_id == dataset.id,
+                TransformationLog.technique == "differential_privacy"
+            ).first() is not None
+            if has_dp:
+                context = "differential_privacy"
+            elif any(col.sensitivity_type == DataType.NON_SENSITIVE.value for col in dataset.columns):
+                # If some columns were generalized
+                context = "generalized_data"
+
+        overall_score = self._apply_minimum_threshold(overall_score_raw, context)
 
         # Determine compliance
         is_compliant = overall_score < self.THRESHOLDS["overall"]
@@ -531,14 +550,14 @@ class RiskEvaluator:
         if individualization.level == RiskLevel.HIGH:
             recommendations.append(
                 f"Individualisation ({individualization.score:.1f}%): "
-                f"Appliquer la généralisation ou la suppression sur les quasi-identifiants: "
+                f"Appliquer la généralisation, la suppression, le masquage ou la confidentialité différentielle sur les quasi-identifiants: "
                 f"{', '.join(individualization.affected_columns[:3])}"
             )
 
         if correlation.level == RiskLevel.HIGH:
             recommendations.append(
                 f"Corrélation ({correlation.score:.1f}%): "
-                f"Supprimer ou pseudonymiser les identifiants directs: "
+                f"Supprimer ou masquer les identifiants directs: "
                 f"{', '.join(correlation.affected_columns[:3])}"
             )
 

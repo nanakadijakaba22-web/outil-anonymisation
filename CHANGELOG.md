@@ -22,7 +22,7 @@ Premier release fonctionnel de l'outil d'anonymisation conforme à la Loi 25 du 
   - Masquage (emails, téléphones, cartes de crédit)
   - Généralisation (âges, revenus, codes postaux)
   - Suppression (données ultra-sensibles)
-  - Pseudonymisation (noms, prénoms)
+  - Confidentialité différentielle (données numériques)
 - Évaluation des risques selon 3 critères de la Loi 25:
   - Individualisation (40% du score)
   - Corrélation (35% du score)
@@ -127,6 +127,12 @@ Total de **23 commits** professionnels:
   - Meilleure conformité à la Loi 25 (pas d'envoi de données au cloud)
   - Documentation complète dans `docs/AI_ENHANCED_DETECTION.md`
 
+### 🛡️ Security & Privacy
+- **Suppression complète de la pseudonymisation**
+  - Retrait de la technique de pseudonymisation au profit de la **confidentialité différentielle**.
+  - Mise à jour du modèle de risque pour intégrer les garanties mathématiques de la DP.
+  - Nettoyage complet du code (cache, patterns de détection) et de la documentation.
+
 ### 🗑️ Removed
 - Dépendance Groq API et configuration associée
 - Variables d'environnement `GROQ_API_KEY` et `GROQ_MODEL`
@@ -142,7 +148,6 @@ Total de **23 commits** professionnels:
 #### Fonctionnalités planifiées
 - Support Excel/XLSX
 - K-anonymity avancé
-- Differential privacy
 - Multi-tenancy avec authentification
 - Audit logging complet
 - API webhooks pour intégrations

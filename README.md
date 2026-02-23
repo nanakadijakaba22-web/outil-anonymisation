@@ -53,7 +53,7 @@ L'outil analyse automatiquement les fichiers CSV, détecte les données sensible
 | **Masquage** | `jean@test.com` → `je**@te**.com` | Emails, téléphones |
 | **Généralisation** | `75000` → `"75000-100000"` | Revenus, âges |
 | **Suppression** | Colonne NAS → Supprimée | Données très sensibles |
-| **Pseudonymisation** | `Tremblay` → `PERSON_66D67C` | Noms (cohérence garantie) |
+| **Confident. Diff.** | `75000` → `75124` (ε=0.1) | Données numériques (mathématiquement prouvé) |
 
 **Performance:** ~0.022s pour 10 lignes
 
@@ -169,7 +169,7 @@ curl -X POST "http://localhost:8000/api/v1/datasets/{dataset_id}/anonymize" \
   -d '[
     {"column_name": "email", "technique": "masking", "params": {"visible_chars": 2}},
     {"column_name": "nas", "technique": "suppression", "params": {}},
-    {"column_name": "nom", "technique": "pseudonymization", "params": {"prefix": "PERSON_"}}
+    {"column_name": "salaire", "technique": "differential_privacy", "params": {"epsilon": 0.1}}
   ]'
 # → Retourne anonymized_dataset_id
 
@@ -314,7 +314,6 @@ curl http://localhost/health
 **À MODIFIER OBLIGATOIREMENT:**
 ```bash
 POSTGRES_PASSWORD=VOTRE_MOT_DE_PASSE_FORT
-DEFAULT_PSEUDONYM_SEED=NOMBRE_ALEATOIRE_SECURISE
 SESSION_SECRET=$(openssl rand -hex 32)
 BACKEND_CORS_ORIGINS=https://votre-domaine.com
 NEXT_PUBLIC_API_URL=https://votre-domaine.com
@@ -495,8 +494,8 @@ MAX_UPLOAD_SIZE=1073741824  # 1GB
 **Prochaines améliorations (v0.2.0):**
 - Support Excel/XLSX
 - K-anonymity avancé
-- Differential privacy
 - Multi-tenancy
+- Intégration AI plus poussée
 
 ---
 

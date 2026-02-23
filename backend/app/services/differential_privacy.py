@@ -279,12 +279,12 @@ class DifferentialPrivacyEngine:
 
         # Build metadata
         metadata = {
-            "mechanism": mechanism.value,
-            "epsilon": self.epsilon,
-            "delta": self.delta,
-            "sensitivity": sensitivity,
-            "noise_magnitude": noise_magnitude,
-            "privacy_level": self.privacy_level.value
+            "mechanism": str(mechanism.value),
+            "epsilon": float(self.epsilon),
+            "delta": float(self.delta),
+            "sensitivity": float(sensitivity),
+            "noise_magnitude": float(noise_magnitude),
+            "privacy_level": str(self.privacy_level.value)
         }
 
         logger.info(

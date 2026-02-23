@@ -25,6 +25,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global Exception Handlers
+import logging
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+
+logger = logging.getLogger(__name__)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Log any unhandled exception."""
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    
+    # Special handling for Pydantic serialization errors
+    # These often happen in the response layer
+    if "PydanticSerializationError" in str(type(exc)):
+        logger.error("DETECTION: PydanticSerializationError detected in response layer!")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Erreur de sérialisation des données (NumPy int64/float64).",
+                "error_type": "PydanticSerializationError",
+                "message": str(exc)
+            }
+        )
+        
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Une erreur interne est survenue.", "message": str(exc)}
+    )
+
 
 @app.get("/health")
 async def health_check():

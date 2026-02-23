@@ -168,13 +168,13 @@ Chaque colonne affiche:
 
 ---
 
-#### 4. 🔑 Pseudonymisation
+#### 4. 🔑 confidentialité différentielle
 **Quand l'utiliser**: Noms, prénoms, identifiants
 **Exemple**: `Tremblay` → `PERSON_66D67C`
 **Paramètre**: Préfixe personnalisé
 
 **Avantages**:
-- ✅ Cohérence garantie (même valeur = même pseudonyme)
+- ✅ Cohérence garantie (même valeur = même valeur anonymisée)
 - ✅ Permet le suivi longitudinal
 - ✅ Réversible si besoin (avec clé secrète)
 
@@ -191,7 +191,7 @@ L'outil recommande automatiquement:
 | Type de donnée | Technique recommandée | Raison |
 |----------------|----------------------|---------|
 | NAS, numéro sécurité | Suppression | Trop sensible |
-| Nom, prénom | Pseudonymisation | Cohérence nécessaire |
+| Nom, prénom | confidentialité différentielle | Cohérence nécessaire |
 | Email, téléphone | Masquage | Format à préserver |
 | Âge, revenu | Généralisation | Utilité statistique |
 | Code postal | Généralisation | Localisation approximative |
@@ -269,8 +269,8 @@ id,nom,prenom,email,age,revenu,solde
 
 #### Étape 3: Configuration
 Configuration recommandée:
-- nom → Pseudonymisation (PERSON_*)
-- prenom → Pseudonymisation (PERSON_*)
+- nom → confidentialité différentielle (PERSON_*)
+- prenom → confidentialité différentielle (PERSON_*)
 - email → Masquage (2 chars)
 - age → Généralisation (5 tranches)
 - revenu → Généralisation (5 tranches)
@@ -397,7 +397,7 @@ R: Oui. Les données sont traitées localement sur votre serveur. Rien n'est env
 R: Non, un fichier à la fois. Cela garantit un meilleur contrôle de chaque anonymisation.
 
 **Q: L'anonymisation est-elle réversible?**
-R: Non, sauf pour la pseudonymisation si vous gardez la clé secrète. Les autres techniques sont irréversibles.
+R: Non, sauf pour la confidentialité différentielle si vous gardez la clé secrète. Les autres techniques sont irréversibles.
 
 **Q: Quel format de fichier est supporté?**
 R: Uniquement CSV pour le moment. Excel/XLSX sera ajouté dans une future version.

@@ -3,84 +3,74 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { api } from "@/lib/api";
-import type { DetectionReport, Dataset, AnonymizationResponse } from "@/lib/api";
+import type { DetectionReport, Dataset, ColumnClassification } from "@/lib/api";
 import {
   getSensitivityColor,
   formatSensitivityType,
-  formatTechnique,
+  formatTechniqueWithParams,
+  formatCategory,
 } from "@/lib/utils";
 import Stepper from "@/components/Stepper";
 import ProgressBadge from "@/components/ProgressBadge";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Header from "@/components/Header";
 
-interface TechniquePreview {
+interface ColumnToTransform {
   column_name: string;
   sensitivity_type: string;
+  category: string;
+  risk_score: number;
+  confidence: number;
   technique: string;
-  description: string;
 }
 
 // Map sensitivity types to automatic technique recommendations
-function getAutomaticTechnique(sensitivityType: string, columnName: string, category?: string): TechniquePreview {
+function getAutomaticTechnique(sensitivityType: string, columnName: string, category?: string): string {
   const lowerName = columnName.toLowerCase();
 
   switch (sensitivityType) {
     case 'direct_identifier':
       if (lowerName.includes('nas') || lowerName.includes('ssn') || lowerName.includes('carte')) {
-        return {
-          column_name: columnName,
-          sensitivity_type: sensitivityType,
-          technique: 'suppression',
-          description: 'Colonne completement supprimee (donnee ultra-sensible)'
-        };
+        return 'suppression';
       }
-      return {
-        column_name: columnName,
-        sensitivity_type: sensitivityType,
-        technique: 'masking',
-        description: 'Masquage avec 2 caracteres visibles (ex: je**@te**.com)'
-      };
+      return 'masking';
 
     case 'quasi_identifier':
-      if (lowerName.includes('date') || lowerName.includes('naissance')) {
-        return {
-          column_name: columnName,
-          sensitivity_type: sensitivityType,
-          technique: 'generalization',
-          description: 'Generalisation a l\'annee uniquement'
-        };
-      }
-      return {
-        column_name: columnName,
-        sensitivity_type: sensitivityType,
-        technique: 'generalization',
-        description: 'Generalisation en 5 tranches ou prefixe'
-      };
+      return 'generalization';
 
     case 'sensitive':
       if (category === 'financial' || lowerName.includes('revenu') || lowerName.includes('solde') || lowerName.includes('montant')) {
-        return {
-          column_name: columnName,
-          sensitivity_type: sensitivityType,
-          technique: 'differential_privacy',
-          description: 'Confidentialite differentielle (epsilon=0.1, Laplace)'
-        };
+        return 'differential_privacy';
       }
-      return {
-        column_name: columnName,
-        sensitivity_type: sensitivityType,
-        technique: 'generalization',
-        description: 'Generalisation en prefixe de 3 caracteres'
-      };
+      return 'generalization';
 
     default:
-      return {
-        column_name: columnName,
-        sensitivity_type: sensitivityType,
-        technique: 'none',
-        description: 'Aucune transformation (donnee non-sensible)'
-      };
+      return 'none';
+  }
+}
+
+// Get risk score color based on value
+function getRiskColor(score: number): { bg: string; text: string } {
+  if (score >= 70) {
+    return { bg: 'bg-red-100', text: 'text-red-700' };
+  } else if (score >= 40) {
+    return { bg: 'bg-orange-100', text: 'text-orange-700' };
+  } else {
+    return { bg: 'bg-green-100', text: 'text-green-700' };
+  }
+}
+
+// Calculate risk score based on sensitivity type if not provided
+function calculateRiskScore(sensitivityType: string): number {
+  switch (sensitivityType) {
+    case 'direct_identifier':
+      return 92;
+    case 'quasi_identifier':
+      return 68;
+    case 'sensitive':
+      return 48;
+    default:
+      return 18;
   }
 }
 
@@ -91,12 +81,10 @@ export default function AnonymizationPage() {
 
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [report, setReport] = useState<DetectionReport | null>(null);
-  const [techniquesPreviews, setTechniquesPreviews] = useState<TechniquePreview[]>([]);
+  const [columnsToTransform, setColumnsToTransform] = useState<ColumnToTransform[]>([]);
   const [processing, setProcessing] = useState(false);
-  const [autoStarted, setAutoStarted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [anonymizationResult, setAnonymizationResult] = useState<AnonymizationResponse | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -104,31 +92,75 @@ export default function AnonymizationPage() {
         setLoading(true);
         setError(null);
 
-        const [datasetData, detectionReport] = await Promise.all([
-          api.getDataset(datasetId),
-          api.detectSensitiveData(datasetId),
-        ]);
-
+        // Récupérer le dataset avec ses colonnes déjà classifiées
+        const datasetData = await api.getDataset(datasetId);
         setDataset(datasetData);
-        setReport(detectionReport);
 
-        // Build technique previews for display
-        const previews: TechniquePreview[] = [];
-        Object.entries(detectionReport.columns).forEach(
-          ([columnName, classification]) => {
-            if (classification.sensitivity_type !== 'non_sensitive') {
-              previews.push(
-                getAutomaticTechnique(
-                  classification.sensitivity_type,
-                  columnName,
-                  classification.category
-                )
-              );
-            }
-          },
-        );
+        // Construire le rapport à partir des colonnes du dataset (déjà détectées)
+        if (datasetData.columns && datasetData.columns.length > 0) {
+          const columnsRecord: Record<string, ColumnClassification> = {};
+          let directCount = 0;
+          let quasiCount = 0;
+          let sensitiveCount = 0;
+          let nonSensitiveCount = 0;
 
-        setTechniquesPreviews(previews);
+          datasetData.columns.forEach((col) => {
+            const sensType = col.sensitivity_type || 'non_sensitive';
+            columnsRecord[col.name] = {
+              column_name: col.name,
+              sensitivity_type: sensType as any,
+              category: (col.category || 'other') as any,
+              confidence: col.confidence || 0,
+              justification: '',
+            };
+
+            // Compter les types
+            if (sensType === 'direct_identifier') directCount++;
+            else if (sensType === 'quasi_identifier') quasiCount++;
+            else if (sensType === 'sensitive') sensitiveCount++;
+            else nonSensitiveCount++;
+          });
+
+          const detectionReport: DetectionReport = {
+            dataset_id: datasetId,
+            columns: columnsRecord,
+            overall_risk_score: datasetData.risk_score || 0,
+            summary: {
+              direct_identifier: directCount,
+              quasi_identifier: quasiCount,
+              sensitive: sensitiveCount,
+              non_sensitive: nonSensitiveCount,
+            },
+          };
+
+          setReport(detectionReport);
+
+          // Build list of columns to transform (exclude non_sensitive)
+          const columns: ColumnToTransform[] = [];
+          Object.entries(detectionReport.columns).forEach(
+            ([columnName, classification]) => {
+              // Only include columns that need transformation
+              if (classification.sensitivity_type !== 'non_sensitive') {
+                columns.push({
+                  column_name: columnName,
+                  sensitivity_type: classification.sensitivity_type,
+                  category: classification.category || 'other',
+                  risk_score: calculateRiskScore(classification.sensitivity_type),
+                  confidence: classification.confidence || 0,
+                  technique: getAutomaticTechnique(
+                    classification.sensitivity_type,
+                    columnName,
+                    classification.category
+                  ),
+                });
+              }
+            },
+          );
+
+          setColumnsToTransform(columns);
+        } else {
+          setError("Aucune donnée de détection trouvée. Veuillez d'abord effectuer la détection.");
+        }
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Erreur lors du chargement",
@@ -141,22 +173,12 @@ export default function AnonymizationPage() {
     loadData();
   }, [datasetId]);
 
-  // Auto-start anonymization when page loads
-  useEffect(() => {
-    if (!loading && !autoStarted && report && !error) {
-      setAutoStarted(true);
-      handleAutoAnonymize();
-    }
-  }, [loading, autoStarted, report, error]);
-
-  const handleAutoAnonymize = async () => {
+  const handleAnonymize = async () => {
     try {
       setProcessing(true);
       setError(null);
 
       const response = await api.autoAnonymizeDataset(datasetId);
-      setAnonymizationResult(response);
-
       // Navigate to results page with the anonymized dataset ID
       router.push(`/results/${response.anonymized_dataset_id}`);
     } catch (err) {
@@ -211,7 +233,7 @@ export default function AnonymizationPage() {
               Retour a l'accueil
             </button>
             <button
-              onClick={handleAutoAnonymize}
+              onClick={() => window.location.reload()}
               className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               Reessayer
@@ -240,11 +262,11 @@ export default function AnonymizationPage() {
           {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              {processing ? "Anonymisation en cours..." : "Anonymisation automatique"}
+              {processing ? "Anonymisation en cours..." : "Configuration de l'anonymisation"}
             </h1>
             <p className="text-lg text-gray-600">{dataset.filename}</p>
             <p className="text-sm text-gray-500">
-              {techniquesPreviews.length} colonnes a anonymiser
+              {columnsToTransform.length} colonnes a anonymiser sur {Object.keys(report.columns).length} colonnes au total
             </p>
           </div>
 
@@ -274,10 +296,10 @@ export default function AnonymizationPage() {
           {!processing && (
             <>
               {/* Info Banner */}
-              <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mb-8">
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-8">
                 <div className="flex items-start">
                   <svg
-                    className="w-6 h-6 text-green-600 mr-3 flex-shrink-0 mt-0.5"
+                    className="w-6 h-6 text-blue-600 mr-3 flex-shrink-0 mt-0.5"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -286,16 +308,17 @@ export default function AnonymizationPage() {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
                   <div>
-                    <h3 className="font-semibold text-green-900 mb-1">
-                      Techniques selectionnees automatiquement
+                    <h3 className="font-semibold text-blue-900 mb-1">
+                      Verifiez les techniques recommandees
                     </h3>
-                    <p className="text-sm text-green-800">
-                      Les techniques d'anonymisation optimales ont ete choisies automatiquement
-                      en fonction du type de donnees detecte. L'anonymisation demarrera automatiquement.
+                    <p className="text-sm text-blue-800">
+                      Les techniques d'anonymisation optimales ont ete selectionnees automatiquement
+                      en fonction du type de sensibilite de chaque colonne. Consultez le tableau ci-dessous
+                      puis cliquez sur <strong>"Anonymiser"</strong> pour appliquer ces transformations.
                     </p>
                   </div>
                 </div>
@@ -305,7 +328,7 @@ export default function AnonymizationPage() {
               <div className="bg-white rounded-lg shadow-xl overflow-hidden mb-8">
                 <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
                   <h2 className="text-xl font-semibold text-gray-800">
-                    Techniques a appliquer ({techniquesPreviews.length})
+                    Colonnes a transformer ({columnsToTransform.length})
                   </h2>
                 </div>
 
@@ -320,35 +343,58 @@ export default function AnonymizationPage() {
                           Type
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                          Technique
+                          Categorie
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                          Description
+                          Risque
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Confiance
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Methode
                         </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {techniquesPreviews.map((preview) => {
-                        const colors = getSensitivityColor(preview.sensitivity_type);
+                      {columnsToTransform.map((column) => {
+                        const sensitivityColors = getSensitivityColor(column.sensitivity_type);
+                        const riskColors = getRiskColor(column.risk_score);
                         return (
-                          <tr key={preview.column_name} className="hover:bg-gray-50">
+                          <tr key={column.column_name} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <span className="font-medium text-gray-900">{preview.column_name}</span>
+                              <span className="font-medium text-gray-900">
+                                {column.column_name}
+                              </span>
                             </td>
                             <td className="px-6 py-4">
                               <span
-                                className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${colors.bg} ${colors.text} border ${colors.border}`}
+                                className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${sensitivityColors.bg} ${sensitivityColors.text} border ${sensitivityColors.border}`}
                               >
-                                {formatSensitivityType(preview.sensitivity_type)}
+                                {formatSensitivityType(column.sensitivity_type)}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-sm text-gray-700">
+                                {formatCategory(column.category)}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span
+                                className={`inline-block px-3 py-1 rounded-lg text-sm font-semibold ${riskColors.bg} ${riskColors.text}`}
+                              >
+                                {Math.round(column.risk_score)}%
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-sm text-gray-700">
+                                {Math.round(column.confidence)}%
                               </span>
                             </td>
                             <td className="px-6 py-4">
                               <span className="inline-block px-3 py-1 rounded-lg text-sm font-medium bg-blue-100 text-blue-800">
-                                {formatTechnique(preview.technique)}
+                                {formatTechniqueWithParams(column.technique, column.column_name, column.sensitivity_type)}
                               </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-sm text-gray-700">{preview.description}</p>
                             </td>
                           </tr>
                         );
@@ -359,24 +405,24 @@ export default function AnonymizationPage() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-4 justify-center">
+              <div className="flex flex-col items-center gap-4">
                 <button
-                  onClick={() => router.push(`/detection/${datasetId}`)}
-                  className="py-3 px-8 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-all"
-                >
-                  Retour a la detection
-                </button>
-                <button
-                  onClick={handleAutoAnonymize}
-                  disabled={processing}
-                  className="py-3 px-8 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleAnonymize}
+                  disabled={processing || columnsToTransform.length === 0}
+                  className="py-4 px-12 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105"
                 >
                   <span className="flex items-center">
-                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-6 h-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
-                    Lancer l'anonymisation
+                    Anonymiser
                   </span>
+                </button>
+                <button
+                  onClick={() => router.push(`/detection/${datasetId}`)}
+                  className="py-2 px-6 text-gray-600 hover:text-gray-800 font-medium transition-all"
+                >
+                  Retour a la detection
                 </button>
               </div>
             </>

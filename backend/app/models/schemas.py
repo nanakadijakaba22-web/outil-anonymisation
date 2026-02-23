@@ -3,10 +3,56 @@ Pydantic models for request/response validation and serialization.
 """
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict, Union
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
+import numpy as np
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+
+
+def convert_numpy(obj: Any) -> Any:
+    """Helper to convert NumPy types to standard Python types recursively."""
+    if obj is None:
+        return None
+    
+    # Handle Pydantic models (nested)
+    if hasattr(obj, "model_dump"):
+        return convert_numpy(obj.model_dump())
+        
+    if isinstance(obj, dict):
+        return {k: convert_numpy(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple, set)):
+        return [convert_numpy(v) for v in obj]
+    elif isinstance(obj, (np.int64, np.int32, np.int16, np.int8, np.integer)):
+        return int(obj)
+    elif isinstance(obj, (np.float64, np.float32, np.float16, np.floating)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return convert_numpy(obj.tolist())
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    return obj
+
+
+class BaseSchema(BaseModel):
+    """Base schema that handles NumPy type serialization automatically."""
+    
+    @model_validator(mode="after")
+    def handle_numpy_types(self) -> "BaseSchema":
+        """Convert all NumPy types in the model to standard Python types."""
+        # Convert NumPy types in all fields, including nested ones
+        for field_name in self.model_fields:
+            try:
+                value = getattr(self, field_name)
+                if value is not None:
+                    new_value = convert_numpy(value)
+                    # For Pydantic models, we might need to update the field if it changed
+                    if new_value is not value:
+                        setattr(self, field_name, new_value)
+            except Exception as e:
+                # Fallback: just log and continue
+                print(f"Warning: Failed to convert field {field_name}: {e}")
+        return self
 
 
 # Enums
@@ -43,7 +89,6 @@ class AnonymizationTechnique(str, Enum):
     MASKING = "masking"
     GENERALIZATION = "generalization"
     SUPPRESSION = "suppression"
-    
     DIFFERENTIAL_PRIVACY = "differential_privacy"
 
 
@@ -57,7 +102,7 @@ class JobStatus(str, Enum):
 
 
 # Column Schemas
-class ColumnInfo(BaseModel):
+class ColumnInfo(BaseSchema):
     """Information about a dataset column."""
 
     name: str
@@ -68,12 +113,12 @@ class ColumnInfo(BaseModel):
     confidence: Optional[float] = None
     null_count: int = 0
     unique_count: int = 0
-    sample_values: Optional[list[Any]] = None
+    sample_values: Optional[List[Any]] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class ColumnClassification(BaseModel):
+class ColumnClassification(BaseSchema):
     """Classification result for a column."""
 
     column_name: str
@@ -83,12 +128,13 @@ class ColumnClassification(BaseModel):
     justification: str
     suggested_config: Optional["AnonymizationConfig"] = None
 
-class AnonymizationConfig(BaseModel):
+
+class AnonymizationConfig(BaseSchema):
     """Configuration for anonymizing a single column."""
 
     column_name: str
     technique: AnonymizationTechnique
-    params: dict[str, Any] = Field(default_factory=dict)
+    params: Dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -101,7 +147,7 @@ class AnonymizationConfig(BaseModel):
     )
 
 
-class ColumnSensitivityUpdate(BaseModel):
+class ColumnSensitivityUpdate(BaseSchema):
     """Schema for updating column sensitivity classification."""
 
     sensitivity_type: DataType
@@ -122,10 +168,10 @@ class ColumnSensitivityUpdate(BaseModel):
     )
 
 
-class BulkSensitivityUpdate(BaseModel):
+class BulkSensitivityUpdate(BaseSchema):
     """Schema for bulk updating multiple columns' sensitivity."""
 
-    updates: dict[str, ColumnSensitivityUpdate] = Field(
+    updates: Dict[str, ColumnSensitivityUpdate] = Field(
         ...,
         description="Map of column_name to sensitivity updates"
     )
@@ -149,7 +195,7 @@ class BulkSensitivityUpdate(BaseModel):
 
 
 # Dataset Schemas
-class DatasetCreate(BaseModel):
+class DatasetCreate(BaseSchema):
     """Schema for dataset creation (internal use)."""
 
     filename: str
@@ -161,7 +207,7 @@ class DatasetCreate(BaseModel):
     delimiter: str = ","
 
 
-class DatasetResponse(BaseModel):
+class DatasetResponse(BaseSchema):
     """Dataset information response."""
 
     id: UUID
@@ -173,72 +219,69 @@ class DatasetResponse(BaseModel):
     is_anonymized: bool
     risk_score: Optional[float] = None
     is_loi25_compliant: bool = False
-    columns: list[ColumnInfo] = []
+    columns: List[ColumnInfo] = []
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class DatasetPreview(BaseModel):
+class DatasetPreview(BaseSchema):
     """Dataset preview with sample rows."""
 
     dataset_id: UUID
-    columns: list[str]
-    sample_rows: list[dict[str, Any]]
+    columns: List[str]
+    sample_rows: List[Dict[str, Any]]
     total_rows: int
 
 
 # Detection Schemas
-class DetectionReport(BaseModel):
+class DetectionReport(BaseSchema):
     """Report of sensitive data detection."""
 
     dataset_id: UUID
-    columns: dict[str, ColumnClassification]
+    columns: Dict[str, ColumnClassification]
     overall_risk_score: float = Field(ge=0, le=100)
-    summary: dict[str, int]  # Count by sensitivity type
+    summary: Dict[str, int]  # Count by sensitivity type
 
 
 # Anonymization Schemas
-
-
-
-class AnonymizationRequest(BaseModel):
+class AnonymizationRequest(BaseSchema):
     """Request to anonymize a dataset."""
 
     dataset_id: UUID
-    config: list[AnonymizationConfig]
+    config: List[AnonymizationConfig]
 
 
-class TransformationDetail(BaseModel):
+class TransformationDetail(BaseSchema):
     """Details of a single transformation."""
 
     column_name: str
     technique: AnonymizationTechnique
-    params: dict[str, Any]
+    params: Dict[str, Any]
     values_affected: int
-    sample_transformations: Optional[list[dict[str, Any]]] = None
+    sample_transformations: Optional[List[Dict[str, Any]]] = None
 
 
-class AnonymizationResponse(BaseModel):
+class AnonymizationResponse(BaseSchema):
     """Response after anonymization."""
 
     job_id: UUID
     anonymized_dataset_id: UUID
-    transformations: list[TransformationDetail]
+    transformations: List[TransformationDetail]
     processing_time_seconds: float
     status: JobStatus
 
 
 # Risk Assessment Schemas
-class RiskScore(BaseModel):
+class RiskScore(BaseSchema):
     """Risk score for a single criterion."""
 
     score: float = Field(ge=0, le=100)
     level: RiskLevel
     justification: str
-    affected_columns: list[str] = []
+    affected_columns: List[str] = []
 
 
-class RiskAssessmentResponse(BaseModel):
+class RiskAssessmentResponse(BaseSchema):
     """Complete risk assessment response."""
 
     dataset_id: UUID
@@ -254,14 +297,14 @@ class RiskAssessmentResponse(BaseModel):
     overall_level: RiskLevel
     is_loi25_compliant: bool
 
-    recommendations: list[str]
-    details: Optional[dict[str, Any]] = None
+    recommendations: List[str]
+    details: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 # Report Schemas
-class ReportRequest(BaseModel):
+class ReportRequest(BaseSchema):
     """Request for generating a compliance report."""
 
     dataset_id: UUID
@@ -270,7 +313,7 @@ class ReportRequest(BaseModel):
 
 
 # Health Check
-class HealthResponse(BaseModel):
+class HealthResponse(BaseSchema):
     """Health check response."""
 
     status: str
@@ -279,7 +322,7 @@ class HealthResponse(BaseModel):
 
 
 # Authentication Schemas
-class UserBase(BaseModel):
+class UserBase(BaseSchema):
     """Base user schema with common fields."""
 
     email: str = Field(..., description="User email address", max_length=255)
@@ -302,7 +345,7 @@ class UserCreate(UserBase):
     )
 
 
-class UserLogin(BaseModel):
+class UserLogin(BaseSchema):
     """Schema for user login."""
 
     email: str = Field(..., description="User email address")
@@ -330,14 +373,14 @@ class UserResponse(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class Token(BaseModel):
+class Token(BaseSchema):
     """JWT token response."""
 
     access_token: str
     token_type: str = "bearer"
 
 
-class TokenData(BaseModel):
+class TokenData(BaseSchema):
     """Data stored in JWT token."""
 
     email: Optional[str] = None

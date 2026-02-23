@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 from uuid import UUID
 
+import numpy as np
 import pandas as pd
 from sqlalchemy.orm import Session
 
@@ -45,8 +46,6 @@ class Anonymizer:
     def __init__(self, db: Session):
         self.db = db
         self.ingestion_service = DataIngestionService(db)
-        # Cache for pseudonymization to ensure consistency
-        self._pseudonym_cache: Dict[str, str] = {}
 
     async def anonymize_dataset(
         self,
@@ -103,9 +102,9 @@ class Anonymizer:
                     job_id=job.id,
                     column_name=conf.column_name,
                     technique=conf.technique.value,
-                    params=conf.params,
+                    params=self._ensure_json_serializable(transformation.params),
                     values_affected=transformation.values_affected,
-                    sample_transformations=transformation.sample_transformations,
+                    sample_transformations=self._ensure_json_serializable(transformation.sample_transformations),
                 )
                 self.db.add(log)
 
@@ -160,18 +159,42 @@ class Anonymizer:
 
             self.db.commit()
 
+            self.db.commit()
+
+            # FINAL SANITIZATION: Ensure everything in the response is Python-native
+            sanitized_transformations = [
+                TransformationDetail(
+                    column_name=t.column_name,
+                    technique=t.technique,
+                    params=self._ensure_json_serializable(t.params),
+                    values_affected=int(t.values_affected),
+                    sample_transformations=self._ensure_json_serializable(t.sample_transformations)
+                )
+                for t in transformations
+            ]
+
             return AnonymizationResponse(
                 job_id=job.id,
                 anonymized_dataset_id=anonymized_dataset.id,
-                transformations=transformations,
-                processing_time_seconds=processing_time,
+                transformations=sanitized_transformations,
+                processing_time_seconds=float(processing_time),
                 status=JobStatus.COMPLETED,
             )
 
         except Exception as e:
-            job.status = JobStatus.FAILED.value
-            job.error_message = str(e)
-            self.db.commit()
+            logger.error(f"Error during anonymization job {job.id}: {str(e)}", exc_info=True)
+            # Try to mark job as failed in a separate transaction or flush
+            try:
+                # Refresh job in case of session issues
+                self.db.rollback() # Rollback the failed part
+                job = self.db.query(AnonymizationJob).filter(AnonymizationJob.id == job.id).first()
+                if job:
+                    job.status = JobStatus.FAILED.value
+                    job.error_message = f"Erreur critique: {str(e)}"
+                    self.db.commit()
+            except Exception as rollback_error:
+                logger.error(f"Failed to update job status after error: {rollback_error}")
+            
             raise
 
     def _apply_technique(
@@ -199,8 +222,6 @@ class Anonymizer:
 
         elif technique == AnonymizationTechnique.SUPPRESSION:
             df = self._suppress_column(df, column, job_id, dataset_id)
-
-    
 
         elif technique == AnonymizationTechnique.DIFFERENTIAL_PRIVACY:
             # DP only for numeric columns
@@ -308,40 +329,35 @@ class Anonymizer:
           - range_size: Taille des tranches pour les numériques (optionnel, alternative à bins)
         """
 
-        # === DÉTECTION AUTOMATIQUE DU TYPE ===
+        # === DÉTECTION AUTOMATIQUE DU TYPE AVEC ORDRE DE PRIORITÉ SÉCURISÉ ===
 
-        # 1. Vérifier si c'est une date (datetime)
+        # 1. Vérifier si c'est déjà un type datetime (datetime64)
         if pd.api.types.is_datetime64_any_dtype(df[column]):
-            logger.info(f"Colonne '{column}': Type DATE détecté → Mode range d'années")
-            df[column] = pd.to_datetime(df[column], errors="coerce").dt.year
+            logger.info(f"Colonne '{column}': Type DATE natif détecté → Mode range d'années")
+            df[column] = pd.to_datetime(df[column], errors="coerce").dt.year.fillna("Inconnu").astype(str)
             return df
 
-        # 2. Essayer de détecter les dates sous forme de texte
-        if df[column].dtype == "object" or pd.api.types.is_string_dtype(df[column]):
-            # Échantillon pour test de conversion date
-            sample = df[column].dropna().head(20)
-            try:
-                # Tenter conversion en date
-                date_conversion = pd.to_datetime(sample, errors="coerce")
-                # Si au moins 70% des valeurs sont des dates valides
-                if date_conversion.notna().sum() / len(sample) >= 0.7:
-                    logger.info(f"Colonne '{column}': Dates textuelles détectées → Mode range d'années")
-                    df[column] = pd.to_datetime(df[column], errors="coerce").dt.year
-                    return df
-            except (ValueError, TypeError):
-                pass  # Pas une date, continuer
-
-        # 3. Vérifier si c'est numérique
+        # 2. Vérifier si c'est numérique (int/float) - PRIORITÉ sur la détection de texte
+        # On traite les nombres d'abord pour éviter que pd.to_datetime ne les transforme en timestamps epoch (1970)
         if pd.api.types.is_numeric_dtype(df[column]):
             logger.info(f"Colonne '{column}': Type NUMÉRIQUE détecté → Mode tranches")
 
             # Option A: Utiliser bins (nombre de tranches)
             if "bins" in params or "range_size" not in params:
                 bins = int(params.get("bins", 5))
-
-                # Créer les tranches avec labels descriptifs
-                binned = pd.cut(df[column], bins=bins, include_lowest=True, duplicates="drop")
-                df[column] = binned.astype(str)
+                try:
+                    binned = pd.cut(df[column], bins=bins, include_lowest=True, duplicates="drop")
+                    # Formatter les labels: (40, 50] -> "40-50" pour meilleure lisibilité
+                    def format_interval(x):
+                        if pd.isna(x): return "Inconnu"
+                        return f"{int(x.left)}-{int(x.right)}"
+                    
+                    df[column] = binned.apply(format_interval).astype(str)
+                except Exception as e:
+                    logger.warning(f"Échec du binning pour {column}: {e}. Fallback préfixe.")
+                    df[column] = df[column].astype(str).apply(
+                        lambda x: self._generalize_text_prefix(x, 1) if pd.notna(x) else x
+                    )
                 return df
 
             # Option B: Utiliser range_size (largeur fixe)
@@ -352,20 +368,61 @@ class Anonymizer:
                 )
                 return df
 
-        # 4. Par défaut: Texte → Mode préfixe
-        logger.info(f"Colonne '{column}': Type TEXTE détecté → Mode préfixe")
+        # 3. Essayer de détecter les dates sous forme de texte (object/string)
+        # On ne tente la conversion QUE si les chaînes contiennent des séparateurs de date courants
+        sample = df[column].dropna().head(20).astype(str)
+        is_date_string = False
+        if len(sample) > 0:
+            # Sécurité: Ne tenter to_datetime que si on voit des séparateurs /-/. 
+            if any(re.search(r'[-/.]', s) for s in sample):
+                try:
+                    date_conversion = pd.to_datetime(sample, errors="coerce")
+                    if date_conversion.notna().sum() / len(sample) >= 0.7:
+                        is_date_string = True
+                except (ValueError, TypeError):
+                    pass
+
+        if is_date_string:
+            logger.info(f"Colonne '{column}': Dates textuelles détectées → Mode range d'années")
+            df[column] = pd.to_datetime(df[column], errors="coerce").dt.year.fillna("Inconnu").astype(str)
+            return df
+
+        # 4. Par défaut: Texte (ou tout autre type non identifié) → Mode préfixe
+        logger.info(f"Colonne '{column}': Traitement par défaut (Type: {df[column].dtype}) → Mode préfixe")
         prefix_length = int(params.get("prefix_length", 3))
-        df[column] = df[column].apply(
-            lambda x: self._generalize_text_prefix(x, prefix_length) if pd.notna(x) else x
+        df[column] = df[column].astype(str).apply(
+            lambda x: self._generalize_text_prefix(x, prefix_length) if pd.notna(x) and x != "nan" else x
         )
 
         return df
 
 
+    def _ensure_json_serializable(self, obj: Any) -> Any:
+        """
+        Recursively convert NumPy types to Python types for JSON serialization.
+        This provides a second layer of defense alongside RobustJSON.
+        """
+        if isinstance(obj, dict):
+            return {k: self._ensure_json_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [self._ensure_json_serializable(v) for v in obj]
+        elif isinstance(obj, (np.int64, np.int32, np.int16, np.int8)):
+            return int(obj)
+        elif isinstance(obj, (np.float64, np.float32, np.float16)):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif pd.isna(obj):
+            return None
+        return obj
+
     def _generalize_to_range(self, value: Any, range_size: int) -> str:
         """Convert numeric value to range string."""
         try:
             num = float(value)
+            # Protection against zero range_size
+            if range_size <= 0:
+                return str(value)
             lower = int(num // range_size) * range_size
             upper = lower + range_size
             return f"{lower}-{upper}"
@@ -549,7 +606,7 @@ class Anonymizer:
             # =========================================================================
             # RÈGLE 1: IDENTIFIANTS DIRECTS → SUPPRESSION (toujours, sans exception)
             # =========================================================================
-            if classification.sensitivity_type.value == "direct_identifier":
+            if classification["sensitivity_type"].value == "direct_identifier":
                 # TOUS les identifiants directs sont SUPPRIMÉS (colonne retirée)
                 # Cela inclut: NAS, SSN, email, téléphone, nom, prénom, carte de crédit, etc.
                 config = AnonymizationConfig(
@@ -559,24 +616,24 @@ class Anonymizer:
                 )
                 logger.info(
                     f"Identifiant direct '{column_name}' → SUPPRESSION "
-                    f"(justification: {classification.justification})"
+                    f"(justification: {classification['justification']})"
                 )
 
             # =========================================================================
             # RÈGLE 2: DONNÉES SENSIBLES → DP (numérique) ou GENERALIZATION (texte)
             # =========================================================================
-            elif classification.sensitivity_type.value == "sensitive":
+            elif classification["sensitivity_type"].value == "sensitive":
                 if column_name in df.columns and pd.api.types.is_numeric_dtype(df[column_name]):
                     # Données sensibles NUMÉRIQUES: Confidentialité différentielle
-                    # epsilon=0.1 = protection FORTE (très bruité mais très privé)
+                    # epsilon=1.0 = protection MODÉRÉE (Census standard), meilleur équilibre utilité
                     config = AnonymizationConfig(
                         column_name=column_name,
                         technique=AnonymizationTechnique.DIFFERENTIAL_PRIVACY,
-                        params={"epsilon": 0.1, "mechanism": "laplace"}
+                        params={"epsilon": 1.0, "mechanism": "laplace"}
                     )
                     logger.info(
                         f"Donnée sensible numérique '{column_name}' → DIFFERENTIAL_PRIVACY "
-                        f"(epsilon=0.1, mechanism=laplace)"
+                        f"(epsilon=1.0, mechanism=laplace)"
                     )
                 else:
                     # Données sensibles NON-NUMÉRIQUES: Généralisation par préfixe
@@ -593,7 +650,7 @@ class Anonymizer:
             # =========================================================================
             # RÈGLE 3: QUASI-IDENTIFIANTS → GENERALIZATION selon le type de données
             # =========================================================================
-            elif classification.sensitivity_type.value == "quasi_identifier":
+            elif classification["sensitivity_type"].value == "quasi_identifier":
                 if column_name in df.columns:
                     col_data = df[column_name]
 
@@ -615,7 +672,7 @@ class Anonymizer:
                         if len(sample) > 0:
                             try:
                                 date_conversion = pd.to_datetime(sample, errors="coerce")
-                                if date_conversion.notna().sum() / len(sample) >= 0.7:
+                                if len(sample) > 0 and date_conversion.notna().sum() / len(sample) >= 0.7:
                                     is_date_string = True
                             except (ValueError, TypeError):
                                 pass
@@ -668,8 +725,8 @@ class Anonymizer:
                 applied_techniques[column_name] = {
                     "technique": config.technique.value,
                     "params": config.params,
-                    "reason": classification.sensitivity_type.value,
-                    "confidence": classification.confidence
+                    "reason": classification["sensitivity_type"].value,
+                    "confidence": classification["confidence"]
                 }
 
         # 4. Appliquer l'anonymisation en utilisant la méthode existante

@@ -1,6 +1,7 @@
 """
 API endpoints for dataset management.
 """
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
@@ -26,6 +27,7 @@ from app.services.report_generator import PDFReportGenerator
 from app.services.visualization import DataVisualizationService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/upload", response_model=DatasetResponse, status_code=201)
@@ -195,9 +197,20 @@ async def detect_sensitive_data(
     If Ollama is running (ENABLE_AI_DETECTION=true), AI will improve classification accuracy
     for ambiguous columns. Justifications starting with [IA] indicate AI-enhanced results.
     """
-    # Use AI-enhanced detector which falls back to rule-based if AI unavailable
-    detector = AIEnhancedDetector(db)
-    return await detector.analyze_dataset(dataset_id)
+    try:
+        # Use AI-enhanced detector which falls back to rule-based if AI unavailable
+        detector = AIEnhancedDetector(db)
+        return await detector.analyze_dataset(dataset_id)
+    except Exception as e:
+        logger.error(f"Error during detection for dataset {dataset_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Detection failed",
+                "message": str(e),
+                "dataset_id": str(dataset_id)
+            }
+        )
 
 
 @router.put("/{dataset_id}/columns/{column_name}/sensitivity", response_model=ColumnInfo)

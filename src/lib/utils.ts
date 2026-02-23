@@ -121,11 +121,84 @@ export function formatTechnique(technique: string): string {
     case 'masking':
       return 'Masquage';
     case 'generalization':
-      return 'Généralisation';
+      return 'Generalisation';
     case 'suppression':
       return 'Suppression';
     case 'differential_privacy':
-      return 'Confidentialité différentielle';
+      return 'Confidentialite differentielle';
+    case 'none':
+      return 'Aucune';
+    default:
+      return technique;
+  }
+}
+
+// Format technique with parameters for detailed display
+export function formatTechniqueWithParams(
+  technique: string,
+  columnName: string,
+  sensitivityType: string
+): string {
+  const lowerName = columnName.toLowerCase();
+
+  switch (technique) {
+    case 'suppression':
+      return 'Suppression totale';
+
+    case 'masking':
+      return 'Masquage (2 car. visibles)';
+
+    case 'differential_privacy':
+      // Epsilon 1.0 = confidentialité modérée (Census Bureau standard)
+      // Plus epsilon est petit, plus la confidentialité est forte
+      return 'Confidentialite diff. (ε=1.0, securite modérée)';
+
+    case 'generalization':
+      // 1. Dates: généralisation par année
+      if (lowerName.includes('date') || lowerName.includes('naissance')) {
+        return 'Generalisation date (annee uniquement)';
+      }
+
+      // 2. Colonnes textuelles: généralisation par préfixe
+      if (
+        lowerName.includes('ville') ||
+        lowerName.includes('adresse') ||
+        lowerName.includes('rue') ||
+        lowerName.includes('profession') ||
+        lowerName.includes('emploi') ||
+        lowerName.includes('titre') ||
+        lowerName.includes('region') ||
+        lowerName.includes('pays')
+      ) {
+        return 'Generalisation texte (prefixe 3 car.)';
+      }
+
+      // 3. Code postal: préfixe spécial (3 premiers caractères)
+      if (lowerName.includes('code_postal') || lowerName.includes('postal')) {
+        return 'Generalisation (prefixe 3 car.)';
+      }
+
+      // 4. Colonnes numériques: généralisation par tranches
+      if (
+        lowerName.includes('age') ||
+        lowerName.includes('annee') ||
+        lowerName.includes('montant') ||
+        lowerName.includes('nombre') ||
+        lowerName.includes('revenu') ||
+        lowerName.includes('salaire') ||
+        lowerName.includes('solde') ||
+        sensitivityType === 'quasi_identifier' ||
+        sensitivityType === 'sensitive'
+      ) {
+        return 'Generalisation numerique (tranches de 10)';
+      }
+
+      // Default for other text columns
+      return 'Generalisation texte (prefixe 3 car.)';
+
+    case 'none':
+      return 'Aucune transformation';
+
     default:
       return technique;
   }

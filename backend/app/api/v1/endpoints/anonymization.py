@@ -30,7 +30,7 @@ async def anonymize_dataset(
 
     Each configuration specifies:
     - **column_name**: Name of the column to anonymize
-    - **technique**: masking, generalization, suppression, or pseudonymization
+    - **technique**: masking, generalization, suppression, or differential_privacy
     - **params**: Technique-specific parameters
 
     ## Examples:
@@ -62,12 +62,12 @@ async def anonymize_dataset(
     }
     ```
 
-    **Pseudonymization (Names):**
+    **Confidentialité différentielle (Numérique):**
     ```json
     {
-        "column_name": "nom",
-        "technique": "pseudonymization",
-        "params": {"prefix": "PERSON_", "seed": 42}
+        "column_name": "salaire",
+        "technique": "differential_privacy",
+        "params": {"epsilon": 0.1}
     }
     ```
 

@@ -159,7 +159,7 @@ export default function ResultsPage() {
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="text-2xl font-bold text-gray-800">
-              {score.toFixed(1)}%
+              {score > 0 && score < 0.1 ? '< 0.1%' : `${score.toFixed(1)}%`}
             </span>
           </div>
         </div>

@@ -65,6 +65,9 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
         self.ollama_available = False
         self.ai_enabled = False
 
+        # Initialize Ollama client with custom host
+        self.ollama_client = ollama.Client(host=settings.OLLAMA_BASE_URL)
+
         # Check if Ollama is available
         if settings.ENABLE_AI_DETECTION:
             try:
@@ -85,7 +88,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
         """
         try:
             # Test connection by listing available models
-            models = ollama.list()
+            models = self.ollama_client.list()
             model_names = [m.model for m in models.models]
 
             # Check if our configured model is available
@@ -124,14 +127,17 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
         # Enhance classifications with AI
         # Si OLLAMA_ANALYZE_ALL_COLUMNS est True, analyser TOUTES les colonnes
         # Sinon, seulement les colonnes à faible confiance
-        for column_name, classification in report.columns.items():
+        for column_name, classification_obj in report.columns.items():
+            # Robustly handle both dict and object (as BaseSchema might have converted it)
+            classification = classification_obj if isinstance(classification_obj, dict) else classification_obj.model_dump()
+            
             should_analyze = (
                 settings.OLLAMA_ANALYZE_ALL_COLUMNS or
-                classification.confidence < settings.AI_CONFIDENCE_THRESHOLD
+                classification["confidence"] < settings.AI_CONFIDENCE_THRESHOLD
             )
             if should_analyze:
                 logger.info(
-                    f"Low confidence ({classification.confidence}%) for '{column_name}', "
+                    f"Low confidence ({classification['confidence']}%) for '{column_name}', "
                     f"using AI enhancement"
                 )
 
@@ -143,7 +149,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
                 ai_classification = await self._classify_with_ai(
                     column_name=column_name,
                     sample_values=sample_values,
-                    data_type=classification.category.value,
+                    data_type=classification["category"].value if hasattr(classification["category"], "value") else classification["category"],
                     rule_based_result=classification,
                 )
 
@@ -159,11 +165,13 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
                     improved_columns += 1
 
                     # Update column in database
+                    # ensure combined is a dict for following access
+                    combined_dict = combined if isinstance(combined, dict) else combined.model_dump()
                     for column in dataset.columns:
                         if column.name == column_name:
-                            column.sensitivity_type = combined.sensitivity_type.value
-                            column.category = combined.category.value
-                            column.confidence = combined.confidence
+                            column.sensitivity_type = combined_dict["sensitivity_type"].value if hasattr(combined_dict["sensitivity_type"], "value") else combined_dict["sensitivity_type"]
+                            column.category = combined_dict["category"].value if hasattr(combined_dict["category"], "value") else combined_dict["category"]
+                            column.confidence = combined_dict["confidence"]
                             break
 
         # Recalculate summary and risk score
@@ -207,10 +215,10 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
 {json.dumps(sample_values[:10], ensure_ascii=False, indent=2)}
 
 **Classification initiale (règles heuristiques)**:
-- Type: {rule_based_result.sensitivity_type.value}
-- Catégorie: {rule_based_result.category.value}
-- Confiance: {rule_based_result.confidence}%
-- Justification: {rule_based_result.justification}
+- Type: {rule_based_result["sensitivity_type"].value if hasattr(rule_based_result["sensitivity_type"], "value") else rule_based_result["sensitivity_type"]}
+- Catégorie: {rule_based_result["category"].value if hasattr(rule_based_result["category"], "value") else rule_based_result["category"]}
+- Confiance: {rule_based_result["confidence"]}%
+- Justification: {rule_based_result["justification"]}
 
 Fournis ta classification en JSON avec cette structure exacte:
 {{
@@ -222,7 +230,7 @@ Fournis ta classification en JSON avec cette structure exacte:
 
         try:
             # Call Ollama API with JSON format
-            response = ollama.chat(
+            response = self.ollama_client.chat(
                 model=settings.OLLAMA_MODEL,
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
@@ -259,8 +267,8 @@ Fournis ta classification en JSON avec cette structure exacte:
 
     def _combine_classifications(
         self,
-        rule_based: ColumnClassification,
-        ai_based: ColumnClassification,
+        rule_based: Any,
+        ai_based: Any,
     ) -> ColumnClassification:
         """
         Intelligently combine rule-based and AI classifications.
@@ -270,45 +278,49 @@ Fournis ta classification en JSON avec cette structure exacte:
         - If both agree, boost confidence
         - If they disagree, use weighted average
         """
+        # Ensure we work with dicts for uniform subscriptable access
+        rb = rule_based if isinstance(rule_based, dict) else rule_based.model_dump()
+        ab = ai_based if isinstance(ai_based, dict) else ai_based.model_dump()
+
         # High AI confidence -> trust AI
-        if ai_based.confidence >= 80:
+        if ab["confidence"] >= 80:
             return ColumnClassification(
-                column_name=rule_based.column_name,
-                sensitivity_type=ai_based.sensitivity_type,
-                category=ai_based.category,
-                confidence=min(ai_based.confidence + 5, 100),  # Bonus for AI validation
-                justification=f"{ai_based.justification} (confirmé par IA)",
+                column_name=rb["column_name"],
+                sensitivity_type=ab["sensitivity_type"],
+                category=ab["category"],
+                confidence=min(ab["confidence"] + 5, 100),  # Bonus for AI validation
+                justification=f"{ab['justification']} (confirmé par IA)",
             )
 
         # Both agree -> boost confidence
-        if (rule_based.sensitivity_type == ai_based.sensitivity_type and
-            rule_based.category == ai_based.category):
+        if (rb["sensitivity_type"] == ab["sensitivity_type"] and
+            rb["category"] == ab["category"]):
             combined_confidence = min(
-                (rule_based.confidence + ai_based.confidence) / 2 + 10,
+                (rb["confidence"] + ab["confidence"]) / 2 + 10,
                 100
             )
             return ColumnClassification(
-                column_name=rule_based.column_name,
-                sensitivity_type=rule_based.sensitivity_type,
-                category=rule_based.category,
+                column_name=rb["column_name"],
+                sensitivity_type=rb["sensitivity_type"],
+                category=rb["category"],
                 confidence=combined_confidence,
-                justification=f"{rule_based.justification} + {ai_based.justification}",
+                justification=f"{rb['justification']} + {ab['justification']}",
             )
 
         # Disagree -> weighted average, prefer higher confidence
-        if rule_based.confidence > ai_based.confidence:
-            chosen = rule_based
-            other = ai_based
+        if rb["confidence"] > ab["confidence"]:
+            chosen = rb
+            other = ab
         else:
-            chosen = ai_based
-            other = rule_based
+            chosen = ab
+            other = rb
 
         return ColumnClassification(
-            column_name=rule_based.column_name,
-            sensitivity_type=chosen.sensitivity_type,
-            category=chosen.category,
-            confidence=(chosen.confidence * 0.7 + other.confidence * 0.3),
-            justification=f"{chosen.justification} (IA: {other.sensitivity_type.value})",
+            column_name=rb["column_name"],
+            sensitivity_type=chosen["sensitivity_type"],
+            category=chosen["category"],
+            confidence=(chosen["confidence"] * 0.7 + other["confidence"] * 0.3),
+            justification=f"{chosen['justification']} (IA: {other['sensitivity_type'].value if hasattr(other['sensitivity_type'], 'value') else other['sensitivity_type']})",
         )
 
     def _recalculate_report(self, report: DetectionReport) -> DetectionReport:
@@ -317,19 +329,19 @@ Fournis ta classification en JSON avec cette structure exacte:
         summary = {
             "direct_identifier": sum(
                 1 for c in report.columns.values()
-                if c.sensitivity_type == DataType.DIRECT_IDENTIFIER
+                if (c["sensitivity_type"] if isinstance(c, dict) else c.sensitivity_type) == DataType.DIRECT_IDENTIFIER
             ),
             "quasi_identifier": sum(
                 1 for c in report.columns.values()
-                if c.sensitivity_type == DataType.QUASI_IDENTIFIER
+                if (c["sensitivity_type"] if isinstance(c, dict) else c.sensitivity_type) == DataType.QUASI_IDENTIFIER
             ),
             "sensitive": sum(
                 1 for c in report.columns.values()
-                if c.sensitivity_type == DataType.SENSITIVE
+                if (c["sensitivity_type"] if isinstance(c, dict) else c.sensitivity_type) == DataType.SENSITIVE
             ),
             "non_sensitive": sum(
                 1 for c in report.columns.values()
-                if c.sensitivity_type == DataType.NON_SENSITIVE
+                if (c["sensitivity_type"] if isinstance(c, dict) else c.sensitivity_type) == DataType.NON_SENSITIVE
             ),
         }
 

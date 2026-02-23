@@ -86,9 +86,6 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: set[str] = {".csv"}
     UPLOAD_DIR: str = "./uploads"
 
-    # Anonymization Settings
-    DEFAULT_PSEUDONYM_SEED: int = 42
-
     # AI Enhanced Detection Settings
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "gemma3:4b"

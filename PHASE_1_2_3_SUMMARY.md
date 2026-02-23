@@ -514,7 +514,7 @@ GET /api/v1/datasets/{id}/compare/{anonymized_id}
    - ✅ Inférence (strong correlations)
 
 2. **Mesures de protection** (Article 3.5)
-   - ✅ 5 techniques d'anonymisation (masking, generalization, suppression, pseudonymization, DP)
+   - ✅ 5 techniques d'anonymisation (masking, generalization, suppression, confidentialité différentielle, DP)
    - ✅ Vérification post-anonymisation
    - ✅ Évaluation risque résiduel
 

@@ -102,7 +102,7 @@ class PostAnonymizationVerifier:
         direct_ids = [
             col_name
             for col_name, col_data in detection.columns.items()
-            if col_data.sensitivity_type == DataType.DIRECT_IDENTIFIER
+            if (col_data["sensitivity_type"] if isinstance(col_data, dict) else col_data.sensitivity_type) == DataType.DIRECT_IDENTIFIER
         ]
 
         # Extract k-anonymity metrics
@@ -122,12 +122,10 @@ class PostAnonymizationVerifier:
             )
 
         # Check 2: k-anonymity must be >= 5 (if quasi-IDs exist)
-        elif k_value is not None and k_value < self.MIN_K_ANONYMITY:
-            passed = False
+            k_violations_msg = f" {k_violations:.1f}% des enregistrements dans des groupes trop petits." if k_violations is not None else ""
             failure_reason = (
                 f"ÉCHEC: k-anonymité insuffisante (k={k_value}). "
-                f"Minimum requis: k>={self.MIN_K_ANONYMITY}. "
-                f"{k_violations:.1f}% des enregistrements dans des groupes trop petits."
+                f"Minimum requis: k>={self.MIN_K_ANONYMITY}.{k_violations_msg}"
             )
 
         # Check 3: Overall risk must be below compliance threshold
@@ -187,7 +185,7 @@ class PostAnonymizationVerifier:
 
         if len(direct_ids) > 0:
             recommendations.append(
-                f"🔴 CRITIQUE: Supprimer ou pseudonymiser les identifiants directs restants: "
+                f"🔴 CRITIQUE: Supprimer ou masquer les identifiants directs restants: "
                 f"{', '.join(direct_ids)}"
             )
             recommendations.append(

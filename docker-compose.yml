@@ -27,7 +27,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: annoy_backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --timeout-keep-alive 60
     volumes:
       - ./backend:/app
       - backend_uploads:/app/uploads
@@ -42,7 +42,7 @@ services:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma3:4b}
-      - ENABLE_AI_DETECTION=${ENABLE_AI_DETECTION:-false}
+      - ENABLE_AI_DETECTION=${ENABLE_AI_DETECTION:-true}
       - AI_CONFIDENCE_THRESHOLD=${AI_CONFIDENCE_THRESHOLD:-70.0}
     depends_on:
       db:

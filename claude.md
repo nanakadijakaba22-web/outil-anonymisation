@@ -87,8 +87,8 @@ annoy/
 │   │   └── services/          # Logique métier ⭐
 │   │       ├── data_ingestion.py      # Upload & parsing CSV
 │   │       ├── detector.py            # Détection données sensibles
-│   │       ├── anonymizer.py          # 4 techniques anonymisation
-│   │       ├── risk_evaluator.py      # Évaluation Loi 25
+│   │       ├── anonymizer.py          # Techniques d'anonymisation (Masking, Generalization, Suppression, DP)
+│   │       ├── risk_evaluator.py      # Évaluation Loi 25 (incluant risk DP)
 │   │       └── report_generator.py    # Génération PDF
 │   ├── alembic/               # Migrations base de données
 │   ├── tests/                 # Tests E2E
@@ -222,12 +222,12 @@ c. **Suppression**
 - Résultat: Colonne complètement retirée
 - Aucun paramètre
 
-d. **Pseudonymization** (Pseudonymisation)
+d. **Differential Privacy** (Confidentialité différentielle)
 
-- Usage: Noms, prénoms
-- Exemple: `Tremblay` → `PERSON_66D67C`
-- Paramètre: `prefix` (défaut: "ANON\_")
-- Algorithme: SHA-256 hash + seed pour cohérence
+- Usage: Données numériques (revenu, montants, etc.)
+- Exemple: `75000` → `75124` (ε=0.1)
+- Algorithme: Mécanisme de Laplace
+- Garantie: Protection mathématique contre l'inférence
 
 **Performance**: ~17.6 µs par ligne (88ms pour 5000 lignes!)
 
@@ -285,7 +285,7 @@ Overall = (Individualisation × 0.40) + (Corrélation × 0.35) + (Inférence × 
 **Anonymization**:
 
 - `POST /datasets/{id}/anonymize` - Appliquer anonymisation
-  - Body: `[{"column_name": "nom", "technique": "pseudonymization", "params": {...}}]`
+  - Body: `[{"column_name": "salaire", "technique": "differential_privacy", "params": {...}}]`
 - `GET /datasets/{id}/download` - Télécharger CSV anonymisé
 
 **Risk Assessment**:
@@ -353,9 +353,9 @@ const report = await api.detectSensitiveData(datasetId);
 // Anonymization
 const config = [
   {
-    column_name: "nom",
-    technique: "pseudonymization",
-    params: { prefix: "PERSON_" },
+    column_name: "salaire",
+    technique: "differential_privacy",
+    params: { epsilon: 0.1 },
   },
 ];
 const response = await api.anonymizeDataset(datasetId, config);
@@ -606,7 +606,7 @@ MAX_UPLOAD_SIZE=1073741824      # 1 GB
 UPLOAD_DIR=./uploads
 
 # Anonymization
-DEFAULT_PSEUDONYM_SEED=42       # Pour pseudonymisation cohérente
+# (Pseudonym_seed removed - using differential privacy instead)
 
 # Frontend
 NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -788,7 +788,6 @@ Conformité: Score < 20% = CONFORME ✅
 **Production checklist**:
 
 - [ ] Changer `POSTGRES_PASSWORD`
-- [ ] Générer nouveau `DEFAULT_PSEUDONYM_SEED`
 - [ ] Configurer `BACKEND_CORS_ORIGINS` avec domaine réel
 - [ ] Ajouter certificat SSL dans `nginx/ssl/`
 - [ ] Configurer backups automatiques

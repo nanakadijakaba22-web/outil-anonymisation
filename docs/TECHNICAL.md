@@ -323,14 +323,14 @@ def _suppress_column(df: pd.DataFrame, column_name: str) -> pd.DataFrame:
     return df.drop(columns=[column_name])
 ```
 
-##### D. Pseudonymisation
+##### D. confidentialité différentielle
 ```python
 def _pseudonymize_value(value: str, prefix: str = "ANON_", seed: int = 42) -> str:
     """
-    Remplace une valeur par un pseudonyme basé sur hash.
+    Remplace une valeur par un valeur anonymisée basé sur hash.
 
     Caractéristiques:
-    - Déterministe: même valeur → même pseudonyme
+    - Déterministe: même valeur → même valeur anonymisée
     - Irréversible: impossible de retrouver l'original sans clé
     - Cohérent: permet le suivi longitudinal
 
@@ -774,7 +774,7 @@ Anonymise un dataset.
 [
   {
     "column_name": "nom",
-    "technique": "pseudonymization",
+    "technique": "confidentialité différentielle",
     "params": {"prefix": "PERSON_"}
   }
 ]

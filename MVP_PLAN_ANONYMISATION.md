@@ -13,7 +13,7 @@
 ### ✅ INCLUS dans le MVP
 - Import de fichiers CSV
 - Détection automatique des types de données sensibles
-- 4 techniques d'anonymisation (masquage, généralisation, suppression, pseudonymisation)
+- 4 techniques d'anonymisation (masquage, généralisation, suppression, confidentialité différentielle)
 - Évaluation des risques (3 critères Loi 25)
 - Interface web simple
 - Export CSV anonymisé
@@ -246,7 +246,7 @@ Crée un moteur d'anonymisation avec 4 techniques configurables :
 3. SUPPRESSION (Suppression)
    - Supprime complètement la colonne
    
-4. PSEUDONYMISATION
+4. confidentialité différentielle
    - Remplace par un identifiant unique cohérent
    - Même valeur = même pseudo (pour garder les relations)
    
@@ -265,7 +265,7 @@ class AnonymizationTechnique(Enum):
     MASKING = "masking"
     GENERALIZATION = "generalization"
     SUPPRESSION = "suppression"
-    PSEUDONYMIZATION = "pseudonymization"
+    confidentialité différentielle = "confidentialité différentielle"
 
 class Anonymizer:
     def __init__(self):
@@ -310,7 +310,7 @@ curl -X POST http://localhost:8000/api/v1/datasets/{dataset_id}/anonymize \
   -d '{
     "config": {
       "email": {"technique": "masking", "params": {"visible_chars": 2}},
-      "nom": {"technique": "pseudonymization"},
+      "nom": {"technique": "confidentialité différentielle"},
       "nas": {"technique": "suppression"},
       "date_naissance": {"technique": "generalization", "params": {"level": "year"}}
     }
@@ -320,7 +320,7 @@ curl -X POST http://localhost:8000/api/v1/datasets/{dataset_id}/anonymize \
 # Test 2 : Vérification du masquage email
 # "jean.tremblay@email.com" → "je************@em***.com"
 
-# Test 3 : Vérification pseudonymisation cohérente
+# Test 3 : Vérification confidentialité différentielle cohérente
 # Si "Tremblay" apparaît 2 fois, il doit avoir le même pseudo
 
 # Test 4 : Export du dataset anonymisé
@@ -533,7 +533,7 @@ Crée la page de détection des données sensibles :
 ```
 Crée l'interface de configuration de l'anonymisation :
 1. Pour chaque colonne sensible, choix de la technique :
-   - Dropdown : Masquage / Généralisation / Suppression / Pseudonymisation
+   - Dropdown : Masquage / Généralisation / Suppression / confidentialité différentielle
 2. Paramètres spécifiques par technique (ex: nb caractères visibles)
 3. Preview en temps réel de l'anonymisation sur un échantillon
 4. Bouton "Anonymiser" avec confirmation

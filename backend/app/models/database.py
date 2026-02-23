@@ -2,9 +2,11 @@
 SQLAlchemy ORM models for database tables.
 """
 import uuid
+import json
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
+import numpy as np
 from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -15,6 +17,39 @@ from app.core.database import Base
 def utc_now():
     """Return current UTC time as timezone-aware datetime."""
     return datetime.now(timezone.utc)
+
+
+class NumpyJSONEncoder(json.JSONEncoder):
+    """
+    Custom JSON encoder that handles NumPy types.
+    """
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, (np.int64, np.int32, np.int16, np.int8)):
+            return int(obj)
+        if isinstance(obj, (np.float64, np.float32, np.float16)):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (datetime, datetime)):
+            return obj.isoformat()
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
+        return super().default(obj)
+
+
+def json_dumps(obj: Any, **kwargs) -> str:
+    """Custom json.dumps using NumpyJSONEncoder."""
+    return json.dumps(obj, cls=NumpyJSONEncoder, **kwargs)
+
+
+# Custom JSON type for SQLAlchemy that uses our encoder
+class RobustJSON(JSON):
+    """JSON type that handles NumPy types safely."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.json_dumps = json_dumps
 
 
 class Dataset(Base):
@@ -85,7 +120,7 @@ class DatasetColumn(Base):
     # Statistical metadata
     null_count = Column(Integer, default=0)
     unique_count = Column(Integer, default=0)
-    sample_values = Column(JSON, nullable=True)  # List of sample values
+    sample_values = Column(RobustJSON, nullable=True)  # List of sample values
 
     # Relationships
     dataset = relationship("Dataset", back_populates="columns")
@@ -113,7 +148,7 @@ class AnonymizationJob(Base):
     )  # pending, processing, completed, failed
 
     # Configuration
-    config = Column(JSON, nullable=False)  # Anonymization configuration per column
+    config = Column(RobustJSON, nullable=False)  # Anonymization configuration per column
 
     # Results
     output_dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=True)
@@ -146,16 +181,16 @@ class TransformationLog(Base):
     technique = Column(
         String(50),
         nullable=False
-    )  # masking, generalization, suppression, pseudonymization
+    )  # masking, generalization, suppression, differential_privacy
 
-    params = Column(JSON, nullable=True)  # Technique-specific parameters
+    params = Column(RobustJSON, nullable=True)  # Technique-specific parameters
 
     # Statistics
     values_affected = Column(Integer, nullable=False)
     timestamp = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     # Sample transformations (for reporting)
-    sample_transformations = Column(JSON, nullable=True)  # [{original: x, anonymized: y}, ...]
+    sample_transformations = Column(RobustJSON, nullable=True)  # [{original: x, anonymized: y}, ...]
 
     # Relationships
     job = relationship("AnonymizationJob", back_populates="transformation_logs")
@@ -185,13 +220,13 @@ class VerificationLog(Base):
     failure_reason = Column(Text, nullable=True)
 
     # Detected issues
-    direct_ids_found = Column(JSON, nullable=True)  # List of column names
+    direct_ids_found = Column(RobustJSON, nullable=True)  # List of column names
     k_value = Column(Integer, nullable=True)
     k_violations_percentage = Column(Float, nullable=True)
     overall_risk_score = Column(Float, nullable=False)
 
     # Recommendations
-    recommendations = Column(JSON, nullable=True)  # List of fix recommendations
+    recommendations = Column(RobustJSON, nullable=True)  # List of fix recommendations
 
     # Relationships
     dataset = relationship("Dataset")
@@ -234,11 +269,11 @@ class RiskAssessment(Base):
     is_loi25_compliant = Column(Boolean, nullable=False)
 
     # Details
-    details = Column(JSON, nullable=True)  # Detailed analysis per criterion
-    recommendations = Column(JSON, nullable=True)  # List of recommendations
+    details = Column(RobustJSON, nullable=True)  # Detailed analysis per criterion
+    recommendations = Column(RobustJSON, nullable=True)  # List of recommendations
 
     # Visualization data (Phase 3: Enhanced data visualization)
-    visualization_data = Column(JSON, nullable=True)  # Compact summary for charts/graphs
+    visualization_data = Column(RobustJSON, nullable=True)  # Compact summary for charts/graphs
 
     # Relationships
     dataset = relationship("Dataset")
@@ -276,7 +311,7 @@ class SuppressedColumn(Base):
     null_count = Column(Integer, nullable=True)  # How many null values
 
     # Sample values (for audit, encrypted/hashed in production)
-    sample_values = Column(JSON, nullable=True)  # First 3-5 values (sanitized)
+    sample_values = Column(RobustJSON, nullable=True)  # First 3-5 values (sanitized)
 
     # Metadata
     suppressed_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
