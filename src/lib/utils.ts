@@ -119,7 +119,7 @@ export function formatCategory(category: string | null): string {
 export function formatTechnique(technique: string): string {
   switch (technique) {
     case 'masking':
-      return 'Masquage';
+      return 'Suppression';
     case 'generalization':
       return 'Generalisation';
     case 'suppression':
@@ -146,7 +146,7 @@ export function formatTechniqueWithParams(
       return 'Suppression totale';
 
     case 'masking':
-      return 'Masquage (2 car. visibles)';
+      return 'Suppression';
 
     case 'differential_privacy':
       // Epsilon 1.0 = confidentialité modérée (Census Bureau standard)

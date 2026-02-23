@@ -30,10 +30,7 @@ function getAutomaticTechnique(sensitivityType: string, columnName: string, cate
 
   switch (sensitivityType) {
     case 'direct_identifier':
-      if (lowerName.includes('nas') || lowerName.includes('ssn') || lowerName.includes('carte')) {
-        return 'suppression';
-      }
-      return 'masking';
+      return 'suppression';
 
     case 'quasi_identifier':
       return 'generalization';
