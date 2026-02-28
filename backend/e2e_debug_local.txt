@@ -1,0 +1,324 @@
+/Users/NANAKADIJAKABA/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+============================= test session starts ==============================
+platform darwin -- Python 3.11.14, pytest-7.4.4, pluggy-1.6.0 -- /Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend
+plugins: anyio-4.12.1, asyncio-0.23.8
+asyncio: mode=Mode.STRICT
+collecting ... collected 4 items
+
+tests/test_e2e_workflow.py::TestE2EWorkflow::test_complete_workflow SERVER ERROR TypeError: 'ColumnClassification' object is not subscriptable
+
+=== Step 1: Upload CSV ===
+✓ Dataset uploaded: d40a338a-67dc-40c1-8fa6-3ab4b63f63c3
+  - Rows: 25
+  - Columns: 13
+
+=== Step 2: Detect Sensitive Data ===
+✓ Detection completed:
+  - Direct identifiers: 6
+  - Quasi-identifiers: 5
+  - Sensitive: 2
+  - Overall risk: 31.2%
+
+=== Step 3: Assess Risk (Before) ===
+✓ Risk assessment (before):
+  - Overall score: 76.7%
+  - Individualization: 100.0%
+  - Correlation: 69.2%
+  - Inference: 50.0%
+  - Law 25 compliant: False
+
+=== Step 4: Anonymize Dataset ===
+✓ Anonymization completed: d30f410a-f079-47e8-8777-8b14921f4d2d
+  - Transformations: 12
+
+=== Step 5: Assess Risk (After) ===
+✓ Risk assessment (after):
+  - Overall score: 11.3%
+  - Individualization: 28.0%
+  - Correlation: 0.3%
+  - Inference: 0.1%
+  - Law 25 compliant: True
+
+=== Step 6: Download Anonymized CSV ===
+✓ CSV downloaded: 79 bytes
+
+=== Step 7: Generate PDF Compliance Report ===
+FAILED
+tests/test_e2e_workflow.py::TestE2EWorkflow::test_workflow_with_preview PASSED
+tests/test_e2e_workflow.py::TestE2EWorkflow::test_error_handling FAILED
+tests/test_e2e_workflow.py::TestE2EWorkflow::test_dataset_deletion PASSED
+
+=================================== FAILURES ===================================
+____________________ TestE2EWorkflow.test_complete_workflow ____________________
+
+self = <tests.test_e2e_workflow.TestE2EWorkflow object at 0x1209554d0>
+test_csv_path = PosixPath('/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/tests/fixtures/test_data.csv')
+
+    @pytest.mark.asyncio
+    async def test_complete_workflow(self, test_csv_path: Path):
+        """
+        Test complete workflow:
+        1. Upload CSV file
+        2. Detect sensitive data
+        3. Anonymize dataset
+        4. Assess risk (before and after)
+        5. Download anonymized CSV
+        6. Generate PDF compliance report
+        """
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Step 1: Upload CSV file
+            print("\n=== Step 1: Upload CSV ===")
+            with open(test_csv_path, "rb") as f:
+                upload_response = await client.post(
+                    "/api/v1/datasets/upload",
+                    files={"file": ("test_data.csv", f, "text/csv")},
+                )
+    
+            assert upload_response.status_code == 201
+            dataset = upload_response.json()
+            dataset_id = dataset["id"]
+    
+            print(f"✓ Dataset uploaded: {dataset_id}")
+            print(f"  - Rows: {dataset['row_count']}")
+            print(f"  - Columns: {dataset['column_count']}")
+    
+            assert dataset["row_count"] == 25
+            assert dataset["column_count"] == 13
+            assert dataset["is_anonymized"] is False
+    
+            # Step 2: Detect sensitive data
+            print("\n=== Step 2: Detect Sensitive Data ===")
+            detection_response = await client.post(
+                f"/api/v1/datasets/{dataset_id}/detect"
+            )
+    
+            assert detection_response.status_code == 200
+            detection = detection_response.json()
+    
+            print(f"✓ Detection completed:")
+            print(f"  - Direct identifiers: {detection['summary']['direct_identifier']}")
+            print(f"  - Quasi-identifiers: {detection['summary']['quasi_identifier']}")
+            print(f"  - Sensitive: {detection['summary']['sensitive']}")
+            print(f"  - Overall risk: {detection['overall_risk_score']:.1f}%")
+    
+            # Verify expected detections
+            assert detection["summary"]["direct_identifier"] >= 4  # NAS, email, phone, names
+            assert detection["summary"]["quasi_identifier"] >= 2  # DOB, postal code
+            assert detection["overall_risk_score"] > 20  # Should be non-compliant
+    
+            # Step 3: Assess risk before anonymization
+            print("\n=== Step 3: Assess Risk (Before) ===")
+            risk_before_response = await client.get(
+                f"/api/v1/datasets/{dataset_id}/risk-assessment"
+            )
+    
+            assert risk_before_response.status_code == 200
+            risk_before = risk_before_response.json()
+    
+            print(f"✓ Risk assessment (before):")
+            print(f"  - Overall score: {risk_before['overall_score']:.1f}%")
+            print(f"  - Individualization: {risk_before['individualization']['score']:.1f}%")
+            print(f"  - Correlation: {risk_before['correlation']['score']:.1f}%")
+            print(f"  - Inference: {risk_before['inference']['score']:.1f}%")
+            print(f"  - Law 25 compliant: {risk_before['is_loi25_compliant']}")
+    
+            # Should be non-compliant
+            assert risk_before["is_loi25_compliant"] is False
+    
+            # Step 4: Anonymize dataset
+            print("\n=== Step 4: Anonymize Dataset ===")
+            anonymization_config = [
+                {"column_name": "id", "technique": "suppression", "params": {}},
+                {"column_name": "nom", "technique": "suppression", "params": {}},
+                {"column_name": "prenom", "technique": "suppression", "params": {}},
+                {"column_name": "adresse", "technique": "suppression", "params": {}},
+                {"column_name": "email", "technique": "suppression", "params": {}},
+                {"column_name": "telephone", "technique": "suppression", "params": {}},
+                {"column_name": "nas", "technique": "suppression", "params": {}},
+                {"column_name": "date_naissance", "technique": "suppression", "params": {}},
+                {"column_name": "code_postal", "technique": "suppression", "params": {}},
+                {"column_name": "revenu", "technique": "suppression", "params": {}},
+                {"column_name": "solde_compte", "technique": "suppression", "params": {}},
+                {"column_name": "score_credit", "technique": "suppression", "params": {}},
+                {"column_name": "ville", "technique": "suppression", "params": {}},
+            ]
+    
+            anonymization_response = await client.post(
+                f"/api/v1/datasets/{dataset_id}/anonymize",
+                json=anonymization_config
+            )
+    
+            assert anonymization_response.status_code == 200
+            anonymization = anonymization_response.json()
+            anonymized_dataset_id = anonymization["anonymized_dataset_id"]
+    
+            print(f"✓ Anonymization completed: {anonymized_dataset_id}")
+            print(f"  - Transformations: {len(anonymization['transformations'])}")
+    
+            # Verify transformations
+            assert 11 <= len(anonymization["transformations"]) <= 13
+            assert anonymized_dataset_id != dataset_id
+    
+            # Step 5: Assess risk after anonymization
+            print("\n=== Step 5: Assess Risk (After) ===")
+            risk_after_response = await client.get(
+                f"/api/v1/datasets/{anonymized_dataset_id}/risk-assessment"
+            )
+    
+            assert risk_after_response.status_code == 200
+            risk_after = risk_after_response.json()
+    
+            # Should be compliant now
+            assert risk_after["overall_score"] < 20.0
+            assert risk_after["is_loi25_compliant"] is True
+    
+            print(f"✓ Risk assessment (after):")
+            print(f"  - Overall score: {risk_after['overall_score']:.1f}%")
+            print(f"  - Individualization: {risk_after['individualization']['score']:.1f}%")
+            print(f"  - Correlation: {risk_after['correlation']['score']:.1f}%")
+            print(f"  - Inference: {risk_after['inference']['score']:.1f}%")
+            print(f"  - Law 25 compliant: {risk_after['is_loi25_compliant']}")
+    
+            # Should be compliant after anonymization
+            assert risk_after["is_loi25_compliant"] is True
+            assert risk_after["overall_score"] < risk_before["overall_score"]
+            assert risk_after["overall_score"] < 20  # Compliance threshold
+    
+            # Step 6: Download anonymized CSV
+            print("\n=== Step 6: Download Anonymized CSV ===")
+            download_response = await client.get(
+                f"/api/v1/datasets/{anonymized_dataset_id}/download"
+            )
+    
+            assert download_response.status_code == 200
+            csv_content = download_response.content
+    
+            print(f"✓ CSV downloaded: {len(csv_content)} bytes")
+    
+            # Verify CSV content
+            csv_text = csv_content.decode("utf-8")
+            lines = csv_text.strip().split("\n")
+            assert len(lines) == 26  # Header + 25 data rows
+    
+            # Verify NAS column is removed (suppression)
+            header = lines[0]
+            assert "nas" not in header.lower()
+    
+            # Verify masking (all characters hidden for names)
+            assert "*" in csv_text or "PERSON_" not in csv_text
+    
+            # Step 7: Generate PDF compliance report
+            print("\n=== Step 7: Generate PDF Compliance Report ===")
+            report_response = await client.get(
+                f"/api/v1/datasets/{anonymized_dataset_id}/report"
+            )
+    
+>           assert report_response.status_code == 200
+E           assert 500 == 200
+E            +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+tests/test_e2e_workflow.py:196: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    app.main:main.py:74 Server Error: TypeError: 'ColumnClassification' object is not subscriptable
+Traceback (most recent call last):
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/middleware/cors.py", line 83, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 62, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/routing.py", line 758, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/routing.py", line 778, in app
+    await route.handle(scope, receive, send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/routing.py", line 299, in handle
+    await self.app(scope, receive, send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/routing.py", line 79, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/routing.py", line 74, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/fastapi/routing.py", line 299, in app
+    raise e
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/fastapi/routing.py", line 294, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/fastapi/routing.py", line 191, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/api/v1/endpoints/datasets.py", line 485, in generate_compliance_report
+    pdf_buffer = generator.generate_compliance_report(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/services/report_generator.py", line 149, in generate_compliance_report
+    story.extend(self._build_detection_section(detection_report))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/services/report_generator.py", line 395, in _build_detection_section
+    sensitive_columns = [
+                        ^
+  File "/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/services/report_generator.py", line 398, in <listcomp>
+    if classification["sensitivity_type"]
+       ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+TypeError: 'ColumnClassification' object is not subscriptable
+_____________________ TestE2EWorkflow.test_error_handling ______________________
+
+self = <tests.test_e2e_workflow.TestE2EWorkflow object at 0x120ace790>
+
+    @pytest.mark.asyncio
+    async def test_error_handling(self):
+        """Test error handling for invalid operations."""
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Invalid dataset ID
+            invalid_id = "00000000-0000-0000-0000-000000000000"
+    
+            response = await client.get(f"/api/v1/datasets/{invalid_id}")
+            assert response.status_code == 404
+    
+            # Invalid detection request
+            response = await client.post(f"/api/v1/datasets/{invalid_id}/detect")
+>           assert response.status_code == 404
+E           assert 500 == 404
+E            +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+tests/test_e2e_workflow.py:260: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    app.api.v1.endpoints.datasets:datasets.py:205 Error during detection for dataset 00000000-0000-0000-0000-000000000000: 404: Dataset not found
+Traceback (most recent call last):
+  File "/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/api/v1/endpoints/datasets.py", line 203, in detect_sensitive_data
+    return await detector.analyze_dataset(dataset_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/services/ai_enhanced_detector.py", line 114, in analyze_dataset
+    report = await super().analyze_dataset(dataset_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/services/detector.py", line 159, in analyze_dataset
+    dataset = self.ingestion_service.get_dataset(dataset_id)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/services/data_ingestion.py", line 182, in get_dataset
+    raise HTTPException(status_code=404, detail="Dataset not found")
+fastapi.exceptions.HTTPException: 404: Dataset not found
+=============================== warnings summary ===============================
+app/core/database.py:21
+  /Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/core/database.py:21: MovedIn20Warning: The ``declarative_base()`` function is now available as sqlalchemy.orm.declarative_base(). (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    Base = declarative_base()
+
+../../../Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_e2e_workflow.py::TestE2EWorkflow::test_complete_workflow - ...
+FAILED tests/test_e2e_workflow.py::TestE2EWorkflow::test_error_handling - ass...
+=================== 2 failed, 2 passed, 2 warnings in 0.82s ====================

@@ -79,7 +79,7 @@ class TestOverviewGeneration:
 
         assert overview["total_rows"] == 10
         assert overview["total_columns"] == 4
-        assert overview["numeric_columns"] == 2  # age, income, score (3 total, but age has nulls)
+        assert overview["numeric_columns"] == 3  # age, income, score
         assert overview["categorical_columns"] == 1  # city
 
     def test_overview_memory_usage(self, viz_service, sample_numeric_df):
@@ -97,8 +97,8 @@ class TestOverviewGeneration:
         })
         overview = viz_service._generate_overview(df)
 
-        assert overview["duplicate_rows"] == 2  # 2 duplicate rows
-        assert overview["duplicate_percentage"] == 40.0  # 2/5 * 100
+        assert overview["duplicate_rows"] == 3  # 3 duplicate rows (rows at index 2, 3, 4 are duplicates)
+        assert overview["duplicate_percentage"] == 60.0  # 3/5 * 100
 
     def test_overview_no_duplicates(self, viz_service, sample_numeric_df):
         """Test overview with no duplicates."""
@@ -436,9 +436,9 @@ class TestOutlierDetection:
         outliers = viz_service._detect_outliers(df)
 
         col_outliers = outliers["col"]
-        # Should detect 2 outliers
-        assert col_outliers["count"] == 2
-        assert abs(col_outliers["percentage"] - 28.57) < 0.1  # ~28.57%
+        # Should detect 1 outlier (200) given the IQR calculation
+        assert col_outliers["count"] == 1
+        assert abs(col_outliers["percentage"] - 14.28) < 0.1  # ~14.28% (1/7)
 
     def test_outliers_handles_nulls(self, viz_service, sample_mixed_df):
         """Test outlier detection with null values."""

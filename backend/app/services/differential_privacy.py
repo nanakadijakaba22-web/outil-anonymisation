@@ -237,7 +237,8 @@ class DifferentialPrivacyEngine:
         data: pd.Series,
         mechanism: DPMechanism = DPMechanism.LAPLACE,
         sensitivity: float = None,
-        auto_sensitivity: str = "identity"
+        auto_sensitivity: str = "identity",
+        clip_to_range: bool = False
     ) -> Tuple[pd.Series, dict]:
         """
         Add differential privacy noise to a data column.
@@ -284,8 +285,17 @@ class DifferentialPrivacyEngine:
             "delta": float(self.delta),
             "sensitivity": float(sensitivity),
             "noise_magnitude": float(noise_magnitude),
-            "privacy_level": str(self.privacy_level.value)
+            "privacy_level": str(self.privacy_level.value),
+            "clipped": False
         }
+
+        # Clip to original range if requested
+        if clip_to_range:
+            original_min = data.min()
+            original_max = data.max()
+            noisy_data = noisy_data.clip(lower=original_min, upper=original_max)
+            metadata["clipped"] = True
+            metadata["range"] = (float(original_min), float(original_max))
 
         logger.info(
             f"Applied {mechanism.value} noise: ε={self.epsilon}, "

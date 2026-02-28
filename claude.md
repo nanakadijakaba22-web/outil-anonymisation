@@ -28,7 +28,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | **Validation**          | Pydantic     | 2.6         |
 | **Styling**             | Tailwind CSS | v4          |
 | **PDF Generation**      | ReportLab    | 4.0         |
-| **AI/ML**               | Ollama       | gemma3:4b   |
+| **AI/ML**               | Ollama       | llama3.1:8b   |
 | **Containerization**    | Docker       | Latest      |
 | **Reverse Proxy**       | Nginx        | Alpine      |
 

@@ -88,7 +88,7 @@ class Settings(BaseSettings):
 
     # AI Enhanced Detection Settings
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "gemma3:4b"
+    OLLAMA_MODEL: str = "llama3.1:8b"
     ENABLE_AI_DETECTION: bool = True  # Activé par défaut
     AI_CONFIDENCE_THRESHOLD: float = 70.0
     OLLAMA_ANALYZE_ALL_COLUMNS: bool = True  # Analyser TOUS les champs avec Ollama

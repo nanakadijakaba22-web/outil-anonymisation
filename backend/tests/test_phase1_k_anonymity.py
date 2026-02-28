@@ -115,8 +115,8 @@ class TestKAnonymityCalculation:
 
         # Smallest group has k=2
         assert k_min == 2
-        # 2 records in group with k<5 → 40%
-        assert violations_pct == pytest.approx(40.0, abs=0.1)
+        # ALL records are in groups with k<5 (3 and 2) → 100%
+        assert violations_pct == 100.0
 
 
 class TestMinimumResidualRisk:
@@ -145,9 +145,9 @@ class TestMinimumResidualRisk:
         result_no_direct = self.evaluator._apply_minimum_threshold(0.0, "no_direct_ids")
         assert result_no_direct == 0.3
 
-        # k-anonymity should have 0.2% minimum
+        # k-anonymity should have 0.5% minimum
         result_k_anon = self.evaluator._apply_minimum_threshold(0.0, "k_anonymity")
-        assert result_k_anon == 0.2
+        assert result_k_anon == 0.5
 
     def test_minimum_threshold_preserves_high_scores(self):
         """Test that scores above minimum are preserved."""

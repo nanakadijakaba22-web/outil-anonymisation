@@ -19,6 +19,7 @@ from app.models.schemas import (
     DetectionReport,
 )
 from app.services.data_ingestion import DataIngestionService
+from app.core.text_utils import normalize_text
 
 
 class SensitiveDataDetector:
@@ -32,79 +33,114 @@ class SensitiveDataDetector:
     - Non-sensitive: General information
     """
 
-    # Regex patterns for direct identifiers
+    # Regex patterns for direct and quasi identifiers
     PATTERNS = {
-        # Canadian Social Insurance Number (NAS/SIN): 123-456-789 or 123456789
+        # Canadian Social Insurance Number (NAS/SIN)
         "NAS": r"^\d{3}[-\s]?\d{3}[-\s]?\d{3}$",
 
-        # Email addresses
-        "EMAIL": r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
+        # Quebec Health Insurance Number (RAMQ): ABCD 1234 5678
+        "RAMQ": r"^[A-Z]{4}\s?\d{4}\s?\d{4}$",
 
-        # Canadian phone numbers: (514) 555-1234, 514-555-1234, 514.555.1234
+        # Passport (CA): 2 letters + 6 digits
+        "PASSPORT_CA": r"^[A-Z]{2}\d{6}$",
+
+        # US Social Security Number (SSN)
+        "SSN_US": r"^\d{3}-\d{2}-\d{4}$",
+
+        # Email addresses
+        "EMAIL": r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$",
+
+        # Canadian phone numbers
         "TELEPHONE_CA": r"^(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$",
 
         # Canadian postal code: H3B 1A1, H3B1A1
         "CODE_POSTAL_CA": r"^[A-Z]\d[A-Z][\s]?\d[A-Z]\d$",
 
         # Date formats: YYYY-MM-DD, DD/MM/YYYY, etc.
-        "DATE": r"^\d{4}[-/]\d{2}[-/]\d{2}$|^\d{2}[-/]\d{2}[-/]\d{4}$",
+        "DATE": r"^\d{4}[-/]\d{2}[-/]\d{2}$|^\d{2}[-/]\d{2}[-/]\d{4}$|^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$",
+
+        # Credit Card (General)
+        "CREDIT_CARD": r"^\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}$",
+
+        # IBAN (International Bank Account Number)
+        "IBAN": r"^[A-Z]{2}\d{2}[A-Z0-9]{4,30}$",
+
+        # IP Address (v4 and v6)
+        "IP_ADDRESS": r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^(?:[A-F0-9]{1,4}:){7}[A-F0-9]{1,4}$",
+
+        # MAC Address
+        "MAC_ADDRESS": r"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$",
+
+        # Quebec Driving License (Approximate)
+        "PERMIS_QC": r"^[A-Z]\d{4}\d{6}\d{2}$",
+
+        # GPS Coordinates
+        "GPS_COORDS": r"^-?\d{1,3}\.\d+,\s?-?\d{1,3}\.\d+$",
     }
 
-    # Column name keywords for classification
+    # Column name keywords for classification (FR and EN)
+    # Normalized versions only (no accents, lowercase, snake_case)
     COLUMN_NAME_KEYWORDS = {
-        # Direct identifiers
+        # Direct identifiers - Unique person identifier
         "DIRECT": [
-            "nom", "name", "surname", "lastname", "family_name",
-            "prenom", "firstname", "given_name",
-            "email", "courriel", "e-mail",
-            "nas", "sin", "social_insurance",
-            "telephone", "phone", "tel", "mobile", "cellulaire",
-            # Identifiants uniques (IDs)
-            "id_client", "client_id", "customer_id", "user_id", "userid",
+            "nom", "name", "surname", "lastname", "family_name", "last_name", "full_name", "nom_complet",
+            "prenom", "firstname", "given_name", "first_name", "middle_name", "fullname",
+            "email", "courriel", "e_mail", "mail", "adresse_electronique",
+            "telephone", "phone", "tel", "mobile", "cellulaire", "cell", "fax", "numero_telephone", "phone_number",
+            "nas", "sin", "social_insurance", "assurance_sociale", "ssn", "social_security", "socialsecuritynumber",
+            "ramq", "assurance_maladie", "health_insurance",
+            "passport", "passeport", "no_passport", "passport_number", "numero_passeport",
+            "permis", "license", "licence", "drivers_license", "permis_conduire",
+            "id_client", "client_id", "customer_id", "user_id", "userid", "uid", "sid", "clientid", "customerid",
             "identifiant", "identifier", "numero_client", "customer_number",
-            "no_client", "client_no", "account_id", "compte_id",
-            # Numéros de compte (identifiants bancaires)
-            "numero_compte", "account_number", "no_compte", "account_no",
-            "num_compte", "numero_de_compte",
+            "account_id", "compte_id", "user_name", "username", "login", "pseudo", "nickname", "alias",
         ],
 
-        # Quasi-identifiers
+        # Quasi-identifiers - Can re-identify when combined
         "QUASI": [
-            "date_naissance", "birthdate", "dob", "birth_date", "naissance",
-            "age", "age_",
-            "postal", "zip", "code_postal", "zip_code",
-            "genre", "gender", "sexe", "sex",
-            "adresse", "address", "rue", "street",
-            "ville", "city", "province", "state",
-            # Dates diverses
-            "date_ouverture", "opening_date", "date_creation", "creation_date",
-            "date_inscription", "registration_date",
+            "date_naissance", "birthdate", "dob", "birth_date", "naissance", "born", "birthday", "dateofbirth",
+            "age", "age_at", "tranche_age", "annee_naissance", "birth_year",
+            "genre", "gender", "sexe", "sex", "orientation",
+            "race", "ethnie", "ethnicity", "origine", "origin", "ancestry", "origine_ethnique", "ethnic_origin",
+            "profession", "metier", "job", "occupation", "work", "title", "titre", "poste", "position",
+            "employeur", "employer", "scolarite", "education", "degree", "diplome",
+            "etat_civil", "marital_status", "statut_matrimonial", "mariage", "conjoint", "spouse",
+            "postal", "zip", "code_postal", "zip_code", "postal_code", "pcode", "zipcode", "codepostal",
+            "adresse", "address", "rue", "street", "civique", "apt", "suite", "local", "bureau",
+            "ville", "city", "town", "locality", "province", "state", "etat", "pays", "country", "nation",
+            "region", "coordonnees", "coordinates", "gps", "latitude", "longitude", "coords", "location", "lieu", "geography", "localisation",
+            "date_", "time_", "timestamp", "horodatage",
         ],
 
-        # Financial data (sensitive)
-        "FINANCIAL": [
-            "revenu", "income", "salary", "salaire", "wage",
-            "solde", "balance", "montant", "amount",
-            "compte", "account", "credit", "debit",
-            "prix", "price", "cout", "cost",
-            # Champs financiers spécifiques
-            "solde_compte", "account_balance", "balance_compte",
-            "revenu_annuel", "annual_income", "yearly_income",
-            "revenu_mensuel", "monthly_income",
+        # Sensitive data - Nature is sensitive (Finance, Health, Criminal, Opinion, Law 25)
+        # Note: Religion and Orientation are sensitive under Law 25
+        "SENSITIVE": [
+            # Financial
+            "revenu", "income", "salary", "salaire", "wage", "earnings", "remuneration",
+            "solde", "balance", "montant", "amount", "valeur", "value",
+            "compte_bancaire", "bank_account", "numero_compte", "account_number",
+            "credit_score", "creditscore", "scorecredit", "cote_credit", "rating",
+            "debt", "dette", "emprunt", "loan", "hypotheque",
+            # Health
+            "medical", "health", "sante", "diagnostic", "maladie", "disease", "medical_condition",
+            "condition", "pathology", "traitement", "treatment", "medicament", "medication", "drug",
+            "ordonnance", "symptome", "resultat", "analyse", "test", "medecin", "doctor", "clinique", "hospital", "hospitalisation",
+            # Biometric
+            "empreinte", "fingerprint", "visage", "facial", "biometric", "biometrie", "iris", "faceid", "adn", "dna", "genetic",
+            # Opinions & Social (Law 25)
+            "opinion", "politique", "political", "parti", "party", "vote", "affiliation", "political_opinion", "parti_politique", "political_affiliation",
+            "philosophy", "philosophie", "religion", "croyance", "belief", "faith", "religious_belief",
+            "vie_privee", "privacy", "intimacy", "sexual", "sexuel", "sexual_orientation", "orientation_sexuelle",
+            # Insurance
+            "assurance", "insurance", "police", "policy", "claim"
         ],
-
-        # Health data (sensitive)
-        "HEALTH": [
-            "medical", "medicale", "sante", "health",
-            "diagnostic", "diagnosis", "maladie", "disease",
-            "traitement", "treatment", "medicament", "medication",
-        ],
-
-        # Insurance data (sensitive)
-        "INSURANCE": [
-            "assurance", "insurance", "police", "policy",
-            "prime", "premium", "couverture", "coverage",
-        ],
+        
+        # Non-sensitive data - Low risk
+        "NON_SENSITIVE": [
+            "transaction_count", "nombre_produits", "num_products", "order_status", "statut_commande",
+            "categorie_produit", "product_category", "transaction_date", "date_transaction",
+            "is_active", "active_member", "membre_actif", "status", "statut", "type", "category", "categorie"
+        ]
     }
 
     def __init__(self, db: Session):
@@ -139,27 +175,16 @@ class SensitiveDataDetector:
             classifications[column.name] = classification
 
             # Update column in database
-            column.sensitivity_type = (classification["sensitivity_type"].value if hasattr(classification["sensitivity_type"], "value") else classification["sensitivity_type"]) if isinstance(classification, dict) else classification.sensitivity_type.value
-            column.category = (classification["category"].value if hasattr(classification["category"], "value") else classification["category"]) if isinstance(classification, dict) else classification.category.value
-            column.confidence = classification["confidence"] if isinstance(classification, dict) else classification.confidence
+            # Ensure we use .value for Enum types if they are Enums
+            column.sensitivity_type = classification.sensitivity_type.value if hasattr(classification.sensitivity_type, "value") else classification.sensitivity_type
+            column.category = classification.category.value if hasattr(classification.category, "value") else classification.category
+            column.confidence = classification.confidence
 
         summary = {
-            "direct_identifier": sum(
-                1 for c in classifications.values()
-                if (c["sensitivity_type"] if isinstance(c, dict) else c.sensitivity_type) == DataType.DIRECT_IDENTIFIER
-            ),
-            "quasi_identifier": sum(
-                1 for c in classifications.values()
-                if (c["sensitivity_type"] if isinstance(c, dict) else c.sensitivity_type) == DataType.QUASI_IDENTIFIER
-            ),
-            "sensitive": sum(
-                1 for c in classifications.values()
-                if (c["sensitivity_type"] if isinstance(c, dict) else c.sensitivity_type) == DataType.SENSITIVE
-            ),
-            "non_sensitive": sum(
-                1 for c in classifications.values()
-                if (c["sensitivity_type"] if isinstance(c, dict) else c.sensitivity_type) == DataType.NON_SENSITIVE
-            ),
+            "direct_identifier": sum(1 for c in classifications.values() if c.sensitivity_type == DataType.DIRECT_IDENTIFIER),
+            "quasi_identifier": sum(1 for c in classifications.values() if c.sensitivity_type == DataType.QUASI_IDENTIFIER),
+            "sensitive": sum(1 for c in classifications.values() if c.sensitivity_type == DataType.SENSITIVE),
+            "non_sensitive": sum(1 for c in classifications.values() if c.sensitivity_type == DataType.NON_SENSITIVE),
         }
 
         # Calculate overall risk score (0-100)
@@ -193,118 +218,88 @@ class SensitiveDataDetector:
         data_type: str,
     ) -> ColumnClassification:
         """
-        Detect the sensitivity type of a single column.
-
-        Args:
-            column_name: Name of the column
-            sample_values: Sample values from the column
-            unique_ratio: Ratio of unique values to total rows
-            data_type: Pandas data type
-
-        Returns:
-            ColumnClassification with sensitivity type and confidence
+        Detect the sensitivity type of a single column using combined heuristics.
         """
-        col_name_lower = column_name.lower()
-
+        # 0. Normalize column name
+        normalized_name = normalize_text(column_name)
+        
         # Track confidence scores for each detection method
-        scores = {
-            DataType.DIRECT_IDENTIFIER: 0,
-            DataType.QUASI_IDENTIFIER: 0,
-            DataType.SENSITIVE: 0,
-            DataType.NON_SENSITIVE: 50,  # Default baseline
+        scores: Dict[DataType, float] = {
+            DataType.DIRECT_IDENTIFIER: 0.0,
+            DataType.QUASI_IDENTIFIER: 0.0,
+            DataType.SENSITIVE: 0.0,
+            DataType.NON_SENSITIVE: 40.0,  # Baseline
         }
 
         category = Category.OTHER
         justification_parts = []
 
-        # 1. Check column name heuristics
-        name_check = self._check_column_name(col_name_lower)
+        # 1. Check column name heuristics (primary)
+        name_check = self._check_column_name(normalized_name)
         if name_check:
             sensitivity, cat, score = name_check
             scores[sensitivity] += score
             category = cat
-            justification_parts.append(f"Nom de colonne suggère {cat.value}")
+            justification_parts.append(f"Nom normalisé '{normalized_name}' correspond à {cat.value}")
 
-        # Special case: column named exactly "id" or ending with "_id" with high uniqueness
-        if (col_name_lower == "id" or col_name_lower.endswith("_id")) and unique_ratio > 0.9:
-            scores[DataType.DIRECT_IDENTIFIER] += 60
-            category = Category.PERSONAL
-            justification_parts.append("Identifiant unique détecté (ID)")
-
-        # 2. Check pattern matching on values
+        # 2. Check pattern matching on values (secondary validation)
         pattern_check = self._check_patterns(sample_values)
+        pattern_type = pattern_check[0] if pattern_check else None
         if pattern_check:
-            pattern_type, score = pattern_check
-            if pattern_type == "NAS":
-                scores[DataType.DIRECT_IDENTIFIER] += score
-                category = Category.PERSONAL
-                justification_parts.append("Format NAS détecté")
-            elif pattern_type == "EMAIL":
-                scores[DataType.DIRECT_IDENTIFIER] += score
-                category = Category.PERSONAL
-                justification_parts.append("Format email détecté")
-            elif pattern_type == "TELEPHONE_CA":
-                scores[DataType.DIRECT_IDENTIFIER] += score
-                category = Category.PERSONAL
-                justification_parts.append("Format téléphone détecté")
-            elif pattern_type == "CODE_POSTAL_CA":
-                scores[DataType.QUASI_IDENTIFIER] += score
-                category = Category.PERSONAL
-                justification_parts.append("Format code postal détecté")
-            elif pattern_type == "DATE":
-                scores[DataType.QUASI_IDENTIFIER] += score
-                justification_parts.append("Format date détecté")
+            p_type, score = pattern_check
+            # Direct IDs patterns
+            if p_type in ["NAS", "RAMQ", "PASSPORT_CA", "EMAIL", "TELEPHONE_CA", "PERMIS_QC", "SSN_US"]:
+                scores[DataType.DIRECT_IDENTIFIER] += (score * 0.8)
+                if category == Category.OTHER:
+                    category = Category.HEALTH if p_type == "RAMQ" else Category.PERSONAL
+                justification_parts.append(f"Format {p_type} détecté ({score:.0f}%)")
+                
+            # Financial patterns
+            elif p_type in ["CREDIT_CARD", "IBAN"]:
+                scores[DataType.SENSITIVE] += (score * 0.8)
+                category = Category.FINANCIAL
+                justification_parts.append(f"Format bancaire {p_type} détecté")
+                
+            # Quasi patterns
+            elif p_type in ["CODE_POSTAL_CA", "IP_ADDRESS", "MAC_ADDRESS", "DATE", "GPS_COORDS"]:
+                scores[DataType.QUASI_IDENTIFIER] += (score * 0.6)
+                justification_parts.append(f"Motif technique {p_type} détecté")
 
         # 3. Statistical analysis - uniqueness
-        if True:  # Always check uniqueness now
-            if unique_ratio > 0.95:
-                # Highly unique -> likely identifier
-                scores[DataType.DIRECT_IDENTIFIER] += 20
-                justification_parts.append(f"Haute unicité ({unique_ratio:.1%})")
-            elif unique_ratio > 0.7:
-                scores[DataType.QUASI_IDENTIFIER] += 15
-            elif unique_ratio < 0.1:
-                # Low uniqueness -> might be categorical
-                scores[DataType.NON_SENSITIVE] += 10
-                justification_parts.append(f"Faible unicité ({unique_ratio:.1%})")
+        if unique_ratio > 0.98 and len(sample_values) > 10:
+            scores[DataType.DIRECT_IDENTIFIER] += 25
+            justification_parts.append(f"Unicité critique ({unique_ratio:.1%})")
+        elif unique_ratio > 0.8:
+            scores[DataType.QUASI_IDENTIFIER] += 15
 
         # 4. Data type heuristics
-        if "int64" in data_type or "float64" in data_type:
-            # Numeric data - could be financial
-            if any(kw in col_name_lower for kw in ["revenu", "income", "salary", "solde", "balance"]):
-                scores[DataType.SENSITIVE] += 30
-                category = Category.FINANCIAL
-
+        is_numeric = "int" in str(data_type).lower() or "float" in str(data_type).lower()
+        if is_numeric:
+            if scores[DataType.SENSITIVE] > 0 or scores[DataType.QUASI_IDENTIFIER] > 0:
+                scores[DataType.SENSITIVE] += 10
+                
         # Determine final classification
-        max_score = max(scores.values())
-        if max_score < 60:
-            # Not enough confidence, default to non-sensitive
+        final_type = max(scores.keys(), key=lambda k: scores[k])
+        confidence = min(scores[final_type], 100.0)
+        
+        # If confidence is too low, default to NON_SENSITIVE
+        if confidence < 50:
             final_type = DataType.NON_SENSITIVE
-            confidence = 50
-        else:
-            final_type = max(scores, key=scores.get)
-            confidence = min(max_score, 100)
-
-        # Build justification
-        if not justification_parts:
-            justification_parts.append("Classification basée sur analyse heuristique")
-
-        # Generate suggested configuration
-        suggested_config = self._get_suggested_config(
-            column_name=column_name,
-            sensitivity_type=final_type,
-            category=category,
-            data_type=data_type,
-            pattern_type=pattern_check[0] if pattern_check else None
-        )
+            confidence = 50.0
 
         return ColumnClassification(
             column_name=column_name,
             sensitivity_type=final_type,
             category=category,
             confidence=confidence,
-            justification="; ".join(justification_parts),
-            suggested_config=suggested_config,
+            justification="; ".join(justification_parts) if justification_parts else "Analyse statistique par défaut",
+            suggested_config=self._get_suggested_config(
+                column_name=column_name,
+                sensitivity_type=final_type,
+                category=category,
+                data_type=data_type,
+                pattern_type=pattern_type
+            ),
         )
 
     def _get_suggested_config(
@@ -339,108 +334,141 @@ class SensitiveDataDetector:
                 params={"visible_chars": 2}
             )
 
-        # 2. Quasi-Identifiers -> Generalization
-        if sensitivity_type == DataType.QUASI_IDENTIFIER:
-            # Date detection (Pattern or Type)
-            if pattern_type == "DATE" or "datetime" in data_type or "date" in data_type:
-                return AnonymizationConfig(
-                    column_name=column_name,
-                    technique=AnonymizationTechnique.GENERALIZATION,
-                    params={"mode": "year"}
-                )
-            
-            # Postal Code detection
-            if pattern_type == "CODE_POSTAL_CA":
-                return AnonymizationConfig(
-                    column_name=column_name,
-                    technique=AnonymizationTechnique.GENERALIZATION,
-                    params={"mode": "prefix", "prefix_length": 3}
-                )
+        # 2. Sensitive Data (Numeric) -> Differential Privacy
+        is_numeric = "int" in str(data_type).lower() or "float" in str(data_type).lower()
+        if sensitivity_type == DataType.SENSITIVE and is_numeric:
+             return AnonymizationConfig(
+                column_name=column_name,
+                technique=AnonymizationTechnique.DIFFERENTIAL_PRIVACY,
+                params={"epsilon": 1.0}
+            )
 
-            # Numeric (Age/etc) -> Fixed Range (e.g. 10 years)
-            if "int" in data_type or "float" in data_type:
-                return AnonymizationConfig(
-                    column_name=column_name,
-                    technique=AnonymizationTechnique.GENERALIZATION,
-                    params={"mode": "range", "range_size": 10}
-                )
-
-            # Default Text -> Prefix
+        # 3. Generalization fallback (Quasi or Sensitive Text/Date)
+        # Date -> Year
+        if pattern_type == "DATE" or "datetime" in str(data_type).lower() or "date" in str(data_type).lower():
+            return AnonymizationConfig(
+                column_name=column_name,
+                technique=AnonymizationTechnique.GENERALIZATION,
+                params={"mode": "year"}
+            )
+        
+        # Postal Code detection
+        if pattern_type == "CODE_POSTAL_CA":
             return AnonymizationConfig(
                 column_name=column_name,
                 technique=AnonymizationTechnique.GENERALIZATION,
                 params={"mode": "prefix", "prefix_length": 3}
             )
 
-        # 3. Sensitive Data -> Differential Privacy or Generalization
-        if sensitivity_type == DataType.SENSITIVE:
-            if "int" in data_type or "float" in data_type:
-                 return AnonymizationConfig(
-                    column_name=column_name,
-                    technique=AnonymizationTechnique.DIFFERENTIAL_PRIVACY,
-                    params={"epsilon": 1.0}
-                )
-        
-        return None
+        # Numeric (Age/etc) -> Fixed Range (e.g. 10 years)
+        if is_numeric:
+            return AnonymizationConfig(
+                column_name=column_name,
+                technique=AnonymizationTechnique.GENERALIZATION,
+                params={"mode": "range", "range_size": 10}
+            )
 
-    def _check_column_name(self, col_name_lower: str) -> tuple[DataType, Category, float] | None:
-        """Check if column name matches known patterns."""
+        # Default for text or anything else -> Prefix
+        return AnonymizationConfig(
+            column_name=column_name,
+            technique=AnonymizationTechnique.GENERALIZATION,
+            params={"mode": "prefix", "prefix_length": 3}
+        )
+
+    def _check_column_name(self, normalized_name: str) -> tuple[DataType, Category, float] | None:
+        """Match normalized column name against dictionaries."""
+        
+        # Check explicit non-sensitive first to avoid false positives (e.g., product_name)
+        for keyword in self.COLUMN_NAME_KEYWORDS["NON_SENSITIVE"]:
+            if keyword == normalized_name or f"_{keyword}" in normalized_name or f"{keyword}_" in normalized_name:
+                return (DataType.NON_SENSITIVE, Category.OTHER, 90.0)
 
         # Check direct identifiers
         for keyword in self.COLUMN_NAME_KEYWORDS["DIRECT"]:
-            if keyword in col_name_lower:
-                return (DataType.DIRECT_IDENTIFIER, Category.PERSONAL, 60)
+            if keyword == normalized_name or f"_{keyword}" in normalized_name or f"{keyword}_" in normalized_name:
+                # Exclude if it also contains non-sensitive contexts
+                if any(x in normalized_name for x in ["product", "item", "order", "company", "entreprise", "objet", "status", "statut"]):
+                    continue
+                return (DataType.DIRECT_IDENTIFIER, Category.PERSONAL, 85.0)
+
+        # Check sensitive
+        for keyword in self.COLUMN_NAME_KEYWORDS["SENSITIVE"]:
+            if keyword == normalized_name or f"_{keyword}" in normalized_name or f"{keyword}_" in normalized_name:
+                # Sub-categorization
+                cat = Category.OTHER
+                if any(k in normalized_name for k in ["revenu", "income", "salaire", "salary", "account", "compte", "bank", "bancaire", "credit", "debt", "dette"]):
+                    cat = Category.FINANCIAL
+                elif any(k in normalized_name for k in ["medical", "health", "sante", "maladie", "disease", "treatment", "traitement", "hospital"]):
+                    cat = Category.HEALTH
+                elif any(k in normalized_name for k in ["biometric", "biometrie", "empreinte", "fingerprint", "dna", "adn", "genetic", "faceid", "iris"]):
+                    cat = Category.HEALTH # Biometrics categorized under Health/Personal
+                elif any(k in normalized_name for k in ["religion", "political", "politique", "sexual", "orientation"]):
+                    cat = Category.OTHER # Sensitive Opinions/Orientation
+                
+                return (DataType.SENSITIVE, cat, 85.0)
 
         # Check quasi-identifiers
         for keyword in self.COLUMN_NAME_KEYWORDS["QUASI"]:
-            if keyword in col_name_lower:
-                return (DataType.QUASI_IDENTIFIER, Category.PERSONAL, 50)
-
-        # Check financial
-        for keyword in self.COLUMN_NAME_KEYWORDS["FINANCIAL"]:
-            if keyword in col_name_lower:
-                return (DataType.SENSITIVE, Category.FINANCIAL, 50)
-
-        # Check health
-        for keyword in self.COLUMN_NAME_KEYWORDS["HEALTH"]:
-            if keyword in col_name_lower:
-                return (DataType.SENSITIVE, Category.HEALTH, 50)
-
-        # Check insurance
-        for keyword in self.COLUMN_NAME_KEYWORDS["INSURANCE"]:
-            if keyword in col_name_lower:
-                return (DataType.SENSITIVE, Category.INSURANCE, 50)
+            if keyword == normalized_name or f"_{keyword}" in normalized_name or f"{keyword}_" in normalized_name:
+                return (DataType.QUASI_IDENTIFIER, Category.OTHER, 80.0)
 
         return None
 
     def _check_patterns(self, sample_values: List[Any]) -> tuple[str, float] | None:
         """
         Check if sample values match known patterns.
-
-        Returns:
-            Tuple of (pattern_type, confidence_score) or None
         """
         if not sample_values:
             return None
 
-        # Convert to strings and filter out None values
-        str_values = [str(v) for v in sample_values if v is not None]
+        # Convert to strings and filter out None values, take first 20
+        str_values: List[str] = [str(v).strip() for v in sample_values if v is not None][:20]
         if not str_values:
             return None
+
+        total = len(str_values)
 
         # Test each pattern
         for pattern_name, pattern_regex in self.PATTERNS.items():
             matches = 0
-            total = len(str_values)
-
-            for value in str_values[:min(20, total)]:  # Check first 20 values
-                if re.match(pattern_regex, str(value).strip(), re.IGNORECASE):
+            for value in str_values:
+                if re.match(pattern_regex, value, re.IGNORECASE):
                     matches += 1
 
             # If >70% match, consider it detected
-            match_ratio = matches / min(20, total)
+            match_ratio = matches / total
             if match_ratio > 0.7:
-                confidence = min(match_ratio * 100, 100)
+                confidence = float(min(match_ratio * 100, 100))
+                
+                # Further validation for NAS (checksum)
+                if pattern_name == "NAS":
+                    valid_nas_count = sum(1 for v in str_values if self._is_valid_nas(v))
+                    if valid_nas_count > 0:
+                        confidence = min(confidence + 15.0, 100.0)
+                
                 return (pattern_name, confidence)
 
         return None
+
+    def _is_valid_nas(self, nas: str) -> bool:
+        """
+        Validate a Canadian Social Insurance Number (NAS/SIN) using the Luhn algorithm.
+        """
+        # Remove non-digits
+        digits = re.sub(r"\D", "", nas)
+        if len(digits) != 9:
+            return False
+        
+        # Luhn algorithm
+        try:
+            numbers = [int(d) for d in digits]
+            checksum = 0
+            for i in range(9):
+                if i % 2 == 1: # Even positions (0-indexed) are multiplied by 2
+                    val = numbers[i] * 2
+                    checksum += val if val < 10 else (val - 9)
+                else:
+                    checksum += numbers[i]
+            return checksum % 10 == 0
+        except ValueError:
+            return False

@@ -129,6 +129,8 @@ async def auto_anonymize_dataset(
         return await anonymizer.auto_anonymize(dataset_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'anonymisation automatique: {str(e)}")
 

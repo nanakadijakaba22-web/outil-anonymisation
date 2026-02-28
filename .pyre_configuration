@@ -1,0 +1,15 @@
+{
+  "source_directories": [
+    "backend"
+  ],
+  "search_path": [
+    "backend",
+    "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages"
+  ],
+  "exclude": [
+    ".*/pycache/.*",
+    ".*/.pyre/.*"
+  ],
+  "python_version": "3.11",
+  "site_package_search_strategy": "all"
+}

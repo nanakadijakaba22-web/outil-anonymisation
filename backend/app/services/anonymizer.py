@@ -400,8 +400,11 @@ class Anonymizer:
     def _ensure_json_serializable(self, obj: Any) -> Any:
         """
         Recursively convert NumPy types to Python types for JSON serialization.
-        This provides a second layer of defense alongside RobustJSON.
+        Also handles Pydantic models by calling .model_dump().
         """
+        if hasattr(obj, "model_dump"):
+            return self._ensure_json_serializable(obj.model_dump())
+        
         if isinstance(obj, dict):
             return {k: self._ensure_json_serializable(v) for k, v in obj.items()}
         elif isinstance(obj, (list, tuple)):
@@ -697,15 +700,15 @@ class Anonymizer:
                                 f"Quasi-identifiant texte '{column_name}' → GENERALIZATION (prefix_length=3)"
                             )
 
-                    # 3d. Colonnes NUMÉRIQUES → Généralisation par tranches (bins)
+                    # 3d. Colonnes NUMÉRIQUES → Généralisation par tranches (ranges)
                     elif pd.api.types.is_numeric_dtype(col_data):
                         config = AnonymizationConfig(
                             column_name=column_name,
                             technique=AnonymizationTechnique.GENERALIZATION,
-                            params={"bins": 5}
+                            params={"mode": "range", "range_size": 10}
                         )
                         logger.info(
-                            f"Quasi-identifiant numérique '{column_name}' → GENERALIZATION (bins=5)"
+                            f"Quasi-identifiant numérique '{column_name}' → GENERALIZATION (mode=range, size=10)"
                         )
 
                     # 3e. Fallback: tout autre type → Généralisation par préfixe

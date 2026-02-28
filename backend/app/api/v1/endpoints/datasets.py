@@ -202,6 +202,8 @@ async def detect_sensitive_data(
         detector = AIEnhancedDetector(db)
         return await detector.analyze_dataset(dataset_id)
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error during detection for dataset {dataset_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
@@ -457,8 +459,8 @@ async def generate_compliance_report(
                     values_affected=log.values_affected,
                     sample_transformations=[
                         SampleTransformation(
-                            original=sample.get("original", ""),
-                            anonymized=sample.get("anonymized", "")
+                            original=sample.original,
+                            anonymized=sample.anonymized
                         )
                         for sample in (log.sample_transformations or [])[:5]
                     ]

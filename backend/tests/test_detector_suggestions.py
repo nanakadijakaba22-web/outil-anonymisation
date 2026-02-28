@@ -1,5 +1,8 @@
 import unittest
 from unittest.mock import MagicMock
+
+
+
 from app.services.detector import SensitiveDataDetector
 from app.models.schemas import DataType, Category, AnonymizationTechnique
 
@@ -48,7 +51,7 @@ class TestDetectorSuggestions(unittest.TestCase):
         self.assertEqual(config.technique, AnonymizationTechnique.GENERALIZATION)
         self.assertEqual(config.params["mode"], "year")
 
-    def test_suggest_bins_for_numeric(self):
+    def test_suggest_range_for_numeric(self):
         # Case: Numeric column (e.g. Age)
         config = self.detector._get_suggested_config(
             column_name="age",
@@ -59,8 +62,8 @@ class TestDetectorSuggestions(unittest.TestCase):
         )
         self.assertIsNotNone(config)
         self.assertEqual(config.technique, AnonymizationTechnique.GENERALIZATION)
-        self.assertEqual(config.params["mode"], "bins")
-        self.assertEqual(config.params["bins"], 5)
+        self.assertEqual(config.params["mode"], "range")
+        self.assertEqual(config.params["range_size"], 10)
 
     def test_suggest_prefix_for_text_fallback(self):
         # Case: Text column (e.g. City) with no pattern
@@ -68,6 +71,19 @@ class TestDetectorSuggestions(unittest.TestCase):
             column_name="city",
             sensitivity_type=DataType.QUASI_IDENTIFIER,
             category=Category.PERSONAL,
+            data_type="object",
+            pattern_type=None
+        )
+        self.assertIsNotNone(config)
+        self.assertEqual(config.technique, AnonymizationTechnique.GENERALIZATION)
+        self.assertEqual(config.params["mode"], "prefix")
+
+    def test_suggest_prefix_for_sensitive_text(self):
+        # Case: Sensitive text column (e.g. Opinion politique)
+        config = self.detector._get_suggested_config(
+            column_name="opinion_politique",
+            sensitivity_type=DataType.SENSITIVE,
+            category=Category.OTHER,
             data_type="object",
             pattern_type=None
         )

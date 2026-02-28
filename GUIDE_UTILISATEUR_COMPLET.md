@@ -108,7 +108,7 @@ nano .env
 ```bash
 POSTGRES_PASSWORD=postgres           # Mot de passe DB
 ENABLE_AI_DETECTION=true            # Activer détection IA
-OLLAMA_MODEL=gemma3:4b              # Modèle IA local
+OLLAMA_MODEL=llama3.1:8b              # Modèle IA local
 AI_CONFIDENCE_THRESHOLD=70.0        # Seuil confiance IA
 OLLAMA_ANALYZE_ALL_COLUMNS=false    # Ne pas tout reclassifier
 ```
@@ -136,14 +136,14 @@ npm run dev
 ```bash
 brew install ollama
 ollama serve
-ollama pull gemma3:4b
+ollama pull llama3.1:8b
 ```
 
 **Linux**:
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
 sudo systemctl start ollama
-ollama pull gemma3:4b
+ollama pull llama3.1:8b
 ```
 
 **Configurer pour Docker**:
@@ -633,7 +633,7 @@ Score = (0.05×0.40) + (0.03×0.35) + (0.01×0.25)
 
 ### Modèle utilisé
 
-**gemma3:4b** (Google)
+**llama3.1:8b** (Google)
 - Taille: 3.3 GB
 - RAM requise: 4-8 GB
 - Vitesse: ~2-5s par colonne

@@ -1,0 +1,499 @@
+/Users/NANAKADIJAKABA/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+============================= test session starts ==============================
+platform darwin -- Python 3.11.14, pytest-7.4.4, pluggy-1.6.0 -- /Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend
+plugins: anyio-4.12.1, asyncio-0.23.8
+asyncio: mode=Mode.STRICT
+collecting ... collected 140 items
+
+tests/test_auth.py::TestAuthService::test_password_hashing PASSED
+tests/test_auth.py::TestAuthService::test_jwt_token_creation_and_decoding PASSED
+tests/test_auth.py::TestAuthService::test_invalid_token_decoding PASSED
+tests/test_auth.py::TestAuthEndpoints::test_register_user PASSED
+tests/test_auth.py::TestAuthEndpoints::test_register_duplicate_email PASSED
+tests/test_auth.py::TestAuthEndpoints::test_login_success PASSED
+tests/test_auth.py::TestAuthEndpoints::test_login_wrong_password PASSED
+tests/test_auth.py::TestAuthEndpoints::test_login_nonexistent_user PASSED
+tests/test_auth.py::TestAuthEndpoints::test_get_current_user PASSED
+tests/test_auth.py::TestAuthEndpoints::test_get_current_user_without_token PASSED
+tests/test_auth.py::TestAuthEndpoints::test_get_current_user_invalid_token PASSED
+tests/test_auth.py::TestAuthEndpoints::test_logout PASSED
+tests/test_detector_robust.py::TestSensitiveDataDetector::test_detect_column_type_by_name_direct PASSED
+tests/test_detector_robust.py::TestSensitiveDataDetector::test_detect_column_type_by_name_quasi PASSED
+tests/test_detector_robust.py::TestSensitiveDataDetector::test_detect_column_type_by_name_sensitive_finance PASSED
+tests/test_detector_robust.py::TestSensitiveDataDetector::test_detect_column_type_by_pattern_email PASSED
+tests/test_detector_robust.py::TestSensitiveDataDetector::test_detect_column_type_by_pattern_gps PASSED
+tests/test_detector_robust.py::TestSensitiveDataDetector::test_detect_column_type_by_pattern_iban PASSED
+tests/test_detector_robust.py::TestSensitiveDataDetector::test_detect_column_type_by_pattern_nas PASSED
+tests/test_detector_robust.py::TestSensitiveDataDetector::test_detect_column_type_non_sensitive PASSED
+tests/test_detector_robust.py::TestSensitiveDataDetector::test_nas_checksum PASSED
+tests/test_detector_suggestions.py::TestDetectorSuggestions::test_suggest_prefix_for_postal_code PASSED
+tests/test_detector_suggestions.py::TestDetectorSuggestions::test_suggest_prefix_for_sensitive_text PASSED
+tests/test_detector_suggestions.py::TestDetectorSuggestions::test_suggest_prefix_for_text_fallback PASSED
+tests/test_detector_suggestions.py::TestDetectorSuggestions::test_suggest_range_for_numeric PASSED
+tests/test_detector_suggestions.py::TestDetectorSuggestions::test_suggest_year_for_date_pattern PASSED
+tests/test_detector_suggestions.py::TestDetectorSuggestions::test_suggest_year_for_date_type PASSED
+tests/test_e2e_workflow.py::TestE2EWorkflow::test_complete_workflow 
+=== Step 1: Upload CSV ===
+FAILED
+tests/test_e2e_workflow.py::TestE2EWorkflow::test_workflow_with_preview FAILED
+tests/test_e2e_workflow.py::TestE2EWorkflow::test_error_handling SERVER ERROR OperationalError: (sqlite3.OperationalError) no such table: datasets
+[SQL: SELECT datasets.id AS datasets_id, datasets.filename AS datasets_filename, datasets.file_size AS datasets_file_size, datasets.file_path AS datasets_file_path, datasets.row_count AS datasets_row_count, datasets.column_count AS datasets_column_count, datasets.upload_date AS datasets_upload_date, datasets.risk_score AS datasets_risk_score, datasets.is_loi25_compliant AS datasets_is_loi25_compliant, datasets.is_anonymized AS datasets_is_anonymized, datasets.parent_dataset_id AS datasets_parent_dataset_id, datasets.encoding AS datasets_encoding, datasets.delimiter AS datasets_delimiter 
+FROM datasets 
+WHERE datasets.id = ?
+ LIMIT ? OFFSET ?]
+[parameters: ('00000000000000000000000000000000', 1, 0)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+FAILED
+tests/test_e2e_workflow.py::TestE2EWorkflow::test_dataset_deletion FAILED
+tests/test_generalization_types.py::TestGeneralizationTypeDetection::test_text_generalization_prefix_mode 
+=== Test 1: TEXT Generalization (Prefix Mode) ===
+Original values: ['Montreal', 'Quebec', 'Toronto', 'Vancouver', 'Ottawa']
+Column dtype: object
+Generalized values: ['Mon ***', 'Que ***', 'Tor ***', 'Van ***', 'Ott ***']
+✓ Text generalization successful
+PASSED
+tests/test_generalization_types.py::TestGeneralizationTypeDetection::test_text_generalization_custom_prefix_length 
+=== Test 1b: TEXT with Custom Prefix Length ===
+Original postal codes: ['G1X 3J4', 'H3A 1B1', 'M5V 2T6', 'V6B 2W5']
+Generalized (prefix=4): ['G1X  ***', 'H3A  ***', 'M5V  ***', 'V6B  ***']
+✓ Custom prefix length successful
+PASSED
+tests/test_generalization_types.py::TestGeneralizationTypeDetection::test_numeric_generalization_binning_mode 
+=== Test 2: NUMERIC Generalization (Binning Mode) ===
+Original salaries: [45000, 75000, 55000, 95000, 85000, 65000, 50000, 100000]
+Column dtype: int64
+Generalized bins: ['44944-56000' '67000-78000' '89000-100000' '78000-89000' '56000-67000']
+Value 75000 → '67000-78000'
+✓ Numeric binning successful
+PASSED
+tests/test_generalization_types.py::TestGeneralizationTypeDetection::test_numeric_generalization_float_data 
+=== Test 2b: NUMERIC with Float Data ===
+Original balances (float): [1234.56, 5678.9, 9012.34, 3456.78, 7890.12]
+Column dtype: float64
+Generalized bins: ['1226-3827' '3827-6419' '6419-9012']
+✓ Float binning successful
+PASSED
+tests/test_generalization_types.py::TestGeneralizationTypeDetection::test_date_generalization_datetime_type 
+=== Test 3a: DATE Generalization (datetime64) ===
+Original dates: [Timestamp('1985-03-15 00:00:00'), Timestamp('1990-07-22 00:00:00'), Timestamp('1978-11-30 00:00:00'), Timestamp('1995-02-14 00:00:00'), Timestamp('1982-09-05 00:00:00')]
+Column dtype: datetime64[ns]
+Generalized years: ['1985', '1990', '1978', '1995', '1982']
+✓ Datetime year extraction successful
+PASSED
+tests/test_generalization_types.py::TestGeneralizationTypeDetection::test_date_generalization_string_dates 
+=== Test 3b: DATE Generalization (String Dates) ===
+Original date strings: ['2020-01-15', '2019-06-22', '2021-03-10', '2018-11-05', '2022-09-18']
+Column dtype: object
+Generalized years: ['2020', '2019', '2021', '2018', '2022']
+✓ String date year extraction successful
+PASSED
+tests/test_generalization_types.py::TestGeneralizationTypeDetection::test_date_generalization_mixed_formats 
+=== Test 3c: DATE with ISO Format Strings ===
+Original dates: ['2023-01-15', '2023-02-22', '2023-03-10', '2023-04-05', '2023-05-18', '2022-06-25', '2022-07-30', '2022-08-14', '2021-09-08', '2021-10-17']
+Column dtype: object
+Generalized years: ['2023', '2023', '2023', '2023', '2023', '2022', '2022', '2022', '2021', '2021']
+Unique years: ['2021', '2022', '2023']
+✓ ISO date format handling successful
+PASSED
+tests/test_generalization_types.py::TestGeneralizationTypeDetection::test_combined_dataframe_all_types 
+=== Test 4: Combined DataFrame (All Types) ===
+Original DataFrame:
+        nom  age date_naissance       ville  revenu_annuel date_embauche
+0  Tremblay   35     1988-01-15    Montreal          65000    2015-03-20
+1    Gagnon   42     1981-06-22      Quebec          85000    2010-08-15
+2       Roy   28     1995-03-10       Laval          52000    2020-01-10
+3      Cote   51     1972-11-05    Gatineau          95000    2005-06-30
+4  Bouchard   39     1984-09-18  Sherbrooke          72000    2018-11-25
+
+Column dtypes:
+nom                       object
+age                        int64
+date_naissance    datetime64[ns]
+ville                     object
+revenu_annuel              int64
+date_embauche             object
+dtype: object
+
+--- Generalizing TEXT column: nom ---
+Result: ['Tre ***', 'Gag ***', 'Roy', 'Cot ***', 'Bou ***']
+
+--- Generalizing NUMERIC column: age ---
+Result: ['27-35' '35-43' '43-51']
+
+--- Generalizing DATE column: date_naissance ---
+Result: ['1988', '1981', '1995', '1972', '1984']
+
+--- Generalizing TEXT column: ville ---
+Result: ['Mon ***', 'Que ***', 'Lav ***', 'Gat ***', 'She ***']
+
+--- Generalizing NUMERIC column: revenu_annuel ---
+Result: ['62750-73500' '84250-95000' '51956-62750']
+
+--- Generalizing DATE STRING column: date_embauche ---
+Result: ['2015', '2010', '2020', '2005', '2018']
+
+Generalized DataFrame:
+       nom    age date_naissance    ville revenu_annuel date_embauche
+0  Tre ***  27-35           1988  Mon ***   62750-73500          2015
+1  Gag ***  35-43           1981  Que ***   84250-95000          2010
+2      Roy  27-35           1995  Lav ***   51956-62750          2020
+3  Cot ***  43-51           1972  Gat ***   84250-95000          2005
+4  Bou ***  35-43           1984  She ***   62750-73500          2018
+
+✓ Combined DataFrame generalization successful
+✓ All 3 automatic type detections working correctly
+PASSED
+tests/test_generalization_types.py::TestGeneralizationTypeDetection::test_edge_cases 
+=== Test 5: Edge Cases ===
+
+--- Edge Case 1: Empty/Short Strings ---
+Short strings: ['AB', 'C', '', 'ABC ***']
+
+--- Edge Case 2: All Same Numeric Values ---
+Same values: ['99-100']
+
+--- Edge Case 3: NULL Values ---
+With NULLs: ['49-66', 'nan', '66-83', 'nan', '83-100']
+
+--- Edge Case 4: Single Row ---
+Single row: 41-42
+✓ All edge cases handled correctly
+PASSED
+tests/test_generalization_types.py::TestGeneralizationTypeDetection::test_parameter_validation 
+=== Test 6: Parameter Validation ===
+Bins=3 → 3 unique bins
+Bins=10 → 10 unique bins
+Prefix=2: ['Mo ***', 'Va ***', 'Ed ***']
+Prefix=5: ['Montr ***', 'Vanco ***', 'Edmon ***']
+✓ Parameter validation successful
+PASSED
+tests/test_phase1_k_anonymity.py::TestKAnonymityCalculation::test_k_anonymity_perfect_case PASSED
+tests/test_phase1_k_anonymity.py::TestKAnonymityCalculation::test_k_anonymity_worst_case PASSED
+tests/test_phase1_k_anonymity.py::TestKAnonymityCalculation::test_k_anonymity_mixed_groups PASSED
+tests/test_phase1_k_anonymity.py::TestKAnonymityCalculation::test_k_anonymity_threshold_boundary PASSED
+tests/test_phase1_k_anonymity.py::TestKAnonymityCalculation::test_k_anonymity_no_quasi_identifiers PASSED
+tests/test_phase1_k_anonymity.py::TestKAnonymityCalculation::test_k_anonymity_single_quasi_identifier PASSED
+tests/test_phase1_k_anonymity.py::TestMinimumResidualRisk::test_minimum_threshold_zero_input PASSED
+tests/test_phase1_k_anonymity.py::TestMinimumResidualRisk::test_minimum_threshold_context_specific PASSED
+tests/test_phase1_k_anonymity.py::TestMinimumResidualRisk::test_minimum_threshold_preserves_high_scores PASSED
+tests/test_phase1_k_anonymity.py::TestMinimumResidualRisk::test_minimum_threshold_preserves_medium_scores PASSED
+tests/test_phase1_k_anonymity.py::TestMinimumResidualRisk::test_minimum_threshold_boundary PASSED
+tests/test_phase1_k_anonymity.py::TestIndividualizationWithKAnonymity::test_individualization_no_quasi_identifiers PASSED
+tests/test_phase1_k_anonymity.py::TestIndividualizationWithKAnonymity::test_individualization_high_k_anonymity PASSED
+tests/test_phase1_k_anonymity.py::TestIndividualizationWithKAnonymity::test_individualization_low_k_anonymity PASSED
+tests/test_phase1_k_anonymity.py::TestIndividualizationWithKAnonymity::test_individualization_moderate_k_anonymity PASSED
+tests/test_phase1_k_anonymity.py::TestPostAnonymizationVerifier::test_verification_pass_clean_dataset PASSED
+tests/test_phase1_k_anonymity.py::TestPostAnonymizationVerifier::test_verification_fail_direct_identifiers PASSED
+tests/test_phase1_k_anonymity.py::TestPostAnonymizationVerifier::test_verification_fail_insufficient_k_anonymity PASSED
+tests/test_phase1_k_anonymity.py::TestPostAnonymizationVerifier::test_verification_fail_high_overall_risk PASSED
+tests/test_phase1_k_anonymity.py::TestPostAnonymizationVerifier::test_verification_recommendations_direct_ids PASSED
+tests/test_phase1_k_anonymity.py::TestPostAnonymizationVerifier::test_verification_saves_to_database PASSED
+tests/test_phase1_k_anonymity.py::TestRegressionPrevention::test_no_zero_risk_after_full_anonymization PASSED
+tests/test_phase1_k_anonymity.py::TestRegressionPrevention::test_k_anonymity_used_not_uniqueness PASSED
+tests/test_phase2_differential_privacy.py::TestDifferentialPrivacyEngine::test_engine_initialization PASSED
+tests/test_phase2_differential_privacy.py::TestDifferentialPrivacyEngine::test_engine_initialization_invalid_epsilon PASSED
+tests/test_phase2_differential_privacy.py::TestDifferentialPrivacyEngine::test_engine_initialization_invalid_delta PASSED
+tests/test_phase2_differential_privacy.py::TestDifferentialPrivacyEngine::test_privacy_level_classification_strong PASSED
+tests/test_phase2_differential_privacy.py::TestDifferentialPrivacyEngine::test_privacy_level_classification_moderate PASSED
+tests/test_phase2_differential_privacy.py::TestDifferentialPrivacyEngine::test_privacy_level_classification_weak PASSED
+tests/test_phase2_differential_privacy.py::TestSensitivityCalculation::test_sensitivity_count_query PASSED
+tests/test_phase2_differential_privacy.py::TestSensitivityCalculation::test_sensitivity_identity_query PASSED
+tests/test_phase2_differential_privacy.py::TestSensitivityCalculation::test_sensitivity_mean_query PASSED
+tests/test_phase2_differential_privacy.py::TestSensitivityCalculation::test_sensitivity_sum_query PASSED
+tests/test_phase2_differential_privacy.py::TestSensitivityCalculation::test_sensitivity_with_nulls PASSED
+tests/test_phase2_differential_privacy.py::TestLaplaceNoise::test_laplace_noise_scalar PASSED
+tests/test_phase2_differential_privacy.py::TestLaplaceNoise::test_laplace_noise_series PASSED
+tests/test_phase2_differential_privacy.py::TestLaplaceNoise::test_laplace_noise_scale PASSED
+tests/test_phase2_differential_privacy.py::TestGaussianNoise::test_gaussian_noise_scalar PASSED
+tests/test_phase2_differential_privacy.py::TestGaussianNoise::test_gaussian_noise_series PASSED
+tests/test_phase2_differential_privacy.py::TestGaussianNoise::test_gaussian_vs_laplace PASSED
+tests/test_phase2_differential_privacy.py::TestApplyToColumn::test_apply_laplace_to_column PASSED
+tests/test_phase2_differential_privacy.py::TestApplyToColumn::test_apply_gaussian_to_column PASSED
+tests/test_phase2_differential_privacy.py::TestApplyToColumn::test_apply_with_clipping PASSED
+tests/test_phase2_differential_privacy.py::TestApplyToColumn::test_apply_without_clipping PASSED
+tests/test_phase2_differential_privacy.py::TestApplyToColumn::test_apply_invalid_column PASSED
+tests/test_phase2_differential_privacy.py::TestPrivacyBudgetTracking::test_single_query_budget PASSED
+tests/test_phase2_differential_privacy.py::TestPrivacyBudgetTracking::test_multiple_queries_budget PASSED
+tests/test_phase2_differential_privacy.py::TestPrivacyBudgetTracking::test_budget_warning_for_high_consumption PASSED
+tests/test_phase2_differential_privacy.py::TestPrivacyBudgetTracking::test_budget_success_for_low_consumption PASSED
+tests/test_phase2_differential_privacy.py::TestRecommendedEpsilon::test_low_sensitivity_general PASSED
+tests/test_phase2_differential_privacy.py::TestRecommendedEpsilon::test_moderate_census PASSED
+tests/test_phase2_differential_privacy.py::TestRecommendedEpsilon::test_high_medical PASSED
+tests/test_phase2_differential_privacy.py::TestRecommendedEpsilon::test_default_fallback PASSED
+tests/test_phase2_differential_privacy.py::TestEdgeCases::test_zero_variance_data PASSED
+tests/test_phase2_differential_privacy.py::TestEdgeCases::test_single_value_series PASSED
+tests/test_phase2_differential_privacy.py::TestEdgeCases::test_all_null_series PASSED
+tests/test_phase2_differential_privacy.py::TestDifferentialPrivacyIntegration::test_dp_reduces_utility_but_preserves_distribution PASSED
+tests/test_phase2_differential_privacy.py::TestDifferentialPrivacyIntegration::test_privacy_accuracy_tradeoff PASSED
+tests/test_phase3_visualization.py::TestOverviewGeneration::test_overview_basic_counts PASSED
+tests/test_phase3_visualization.py::TestOverviewGeneration::test_overview_memory_usage PASSED
+tests/test_phase3_visualization.py::TestOverviewGeneration::test_overview_duplicate_detection PASSED
+tests/test_phase3_visualization.py::TestOverviewGeneration::test_overview_no_duplicates PASSED
+tests/test_phase3_visualization.py::TestNumericStatistics::test_numeric_stats_basic_metrics PASSED
+tests/test_phase3_visualization.py::TestNumericStatistics::test_numeric_stats_quartiles PASSED
+tests/test_phase3_visualization.py::TestNumericStatistics::test_numeric_stats_advanced_metrics PASSED
+tests/test_phase3_visualization.py::TestNumericStatistics::test_numeric_stats_handles_nulls PASSED
+tests/test_phase3_visualization.py::TestNumericStatistics::test_numeric_stats_empty_column PASSED
+tests/test_phase3_visualization.py::TestCategoricalStatistics::test_categorical_stats_basic PASSED
+tests/test_phase3_visualization.py::TestCategoricalStatistics::test_categorical_stats_unique_count PASSED
+tests/test_phase3_visualization.py::TestCategoricalStatistics::test_categorical_stats_mode PASSED
+tests/test_phase3_visualization.py::TestCategoricalStatistics::test_categorical_stats_top_values PASSED
+tests/test_phase3_visualization.py::TestCategoricalStatistics::test_categorical_stats_entropy PASSED
+tests/test_phase3_visualization.py::TestCategoricalStatistics::test_categorical_stats_handles_nulls PASSED
+tests/test_phase3_visualization.py::TestMissingDataAnalysis::test_missing_data_totals PASSED
+tests/test_phase3_visualization.py::TestMissingDataAnalysis::test_missing_data_per_column PASSED
+tests/test_phase3_visualization.py::TestMissingDataAnalysis::test_missing_data_no_missing PASSED
+tests/test_phase3_visualization.py::TestDistributionGeneration::test_distributions_numeric_histogram PASSED
+tests/test_phase3_visualization.py::TestDistributionGeneration::test_distributions_categorical_frequencies PASSED
+tests/test_phase3_visualization.py::TestDistributionGeneration::test_distributions_top_20_limit PASSED
+tests/test_phase3_visualization.py::TestDistributionGeneration::test_distributions_handles_empty_columns PASSED
+tests/test_phase3_visualization.py::TestCorrelationMatrix::test_correlation_matrix_basic PASSED
+tests/test_phase3_visualization.py::TestCorrelationMatrix::test_correlation_strong_correlations PASSED
+tests/test_phase3_visualization.py::TestCorrelationMatrix::test_correlation_insufficient_columns PASSED
+tests/test_phase3_visualization.py::TestOutlierDetection::test_outliers_iqr_method PASSED
+tests/test_phase3_visualization.py::TestOutlierDetection::test_outliers_bounds_calculation PASSED
+tests/test_phase3_visualization.py::TestOutlierDetection::test_outliers_percentage PASSED
+tests/test_phase3_visualization.py::TestOutlierDetection::test_outliers_handles_nulls PASSED
+tests/test_phase3_visualization.py::TestDatasetComparison::test_compare_columns_removed PASSED
+tests/test_phase3_visualization.py::TestDatasetComparison::test_compare_columns_added PASSED
+tests/test_phase3_visualization.py::TestDatasetComparison::test_compare_statistics_mean_change PASSED
+tests/test_phase3_visualization.py::TestDatasetComparison::test_compare_statistics_std_change PASSED
+tests/test_phase3_visualization.py::TestDatasetComparison::test_compare_statistics_handles_nulls PASSED
+tests/test_phase3_visualization.py::TestVisualizationSummary::test_visualization_summary_compact PASSED
+tests/test_phase3_visualization.py::TestVisualizationSummary::test_visualization_summary_overview PASSED
+tests/test_phase3_visualization.py::TestVisualizationSummary::test_visualization_summary_outliers_filtered PASSED
+tests/test_phase3_visualization.py::TestGenerateStatisticsIntegration::test_generate_statistics_complete PASSED
+tests/test_phase3_visualization.py::TestEdgeCases::test_empty_dataframe PASSED
+tests/test_phase3_visualization.py::TestEdgeCases::test_single_row_dataframe PASSED
+tests/test_phase3_visualization.py::TestEdgeCases::test_all_same_values PASSED
+
+=================================== FAILURES ===================================
+____________________ TestE2EWorkflow.test_complete_workflow ____________________
+
+self = <tests.test_e2e_workflow.TestE2EWorkflow object at 0x12bce0fd0>
+test_csv_path = PosixPath('/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/tests/fixtures/test_data.csv')
+
+    @pytest.mark.asyncio
+    async def test_complete_workflow(self, test_csv_path: Path):
+        """
+        Test complete workflow:
+        1. Upload CSV file
+        2. Detect sensitive data
+        3. Anonymize dataset
+        4. Assess risk (before and after)
+        5. Download anonymized CSV
+        6. Generate PDF compliance report
+        """
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Step 1: Upload CSV file
+            print("\n=== Step 1: Upload CSV ===")
+            with open(test_csv_path, "rb") as f:
+                upload_response = await client.post(
+                    "/api/v1/datasets/upload",
+                    files={"file": ("test_data.csv", f, "text/csv")},
+                )
+    
+>           assert upload_response.status_code == 201
+E           assert 500 == 201
+E            +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+tests/test_e2e_workflow.py:57: AssertionError
+__________________ TestE2EWorkflow.test_workflow_with_preview __________________
+
+self = <tests.test_e2e_workflow.TestE2EWorkflow object at 0x12bce1790>
+test_csv_path = PosixPath('/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/tests/fixtures/test_data.csv')
+
+    @pytest.mark.asyncio
+    async def test_workflow_with_preview(self, test_csv_path: Path):
+        """Test workflow including data preview."""
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Upload
+            with open(test_csv_path, "rb") as f:
+                upload_response = await client.post(
+                    "/api/v1/datasets/upload",
+                    files={"file": ("test_data.csv", f, "text/csv")},
+                )
+    
+>           dataset_id = upload_response.json()["id"]
+E           KeyError: 'id'
+
+tests/test_e2e_workflow.py:232: KeyError
+_____________________ TestE2EWorkflow.test_error_handling ______________________
+
+self = <tests.test_e2e_workflow.TestE2EWorkflow object at 0x12bce2050>
+
+    @pytest.mark.asyncio
+    async def test_error_handling(self):
+        """Test error handling for invalid operations."""
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Invalid dataset ID
+            invalid_id = "00000000-0000-0000-0000-000000000000"
+    
+            response = await client.get(f"/api/v1/datasets/{invalid_id}")
+>           assert response.status_code == 404
+E           assert 500 == 404
+E            +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+tests/test_e2e_workflow.py:256: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    app.main:main.py:74 Server Error: OperationalError: (sqlite3.OperationalError) no such table: datasets
+[SQL: SELECT datasets.id AS datasets_id, datasets.filename AS datasets_filename, datasets.file_size AS datasets_file_size, datasets.file_path AS datasets_file_path, datasets.row_count AS datasets_row_count, datasets.column_count AS datasets_column_count, datasets.upload_date AS datasets_upload_date, datasets.risk_score AS datasets_risk_score, datasets.is_loi25_compliant AS datasets_is_loi25_compliant, datasets.is_anonymized AS datasets_is_anonymized, datasets.parent_dataset_id AS datasets_parent_dataset_id, datasets.encoding AS datasets_encoding, datasets.delimiter AS datasets_delimiter 
+FROM datasets 
+WHERE datasets.id = ?
+ LIMIT ? OFFSET ?]
+[parameters: ('00000000000000000000000000000000', 1, 0)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+Traceback (most recent call last):
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+sqlite3.OperationalError: no such table: datasets
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/middleware/cors.py", line 83, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 62, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/routing.py", line 758, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/routing.py", line 778, in app
+    await route.handle(scope, receive, send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/routing.py", line 299, in handle
+    await self.app(scope, receive, send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/routing.py", line 79, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/routing.py", line 74, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/fastapi/routing.py", line 299, in app
+    raise e
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/fastapi/routing.py", line 294, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/fastapi/routing.py", line 193, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/starlette/concurrency.py", line 42, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/anyio/to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/anyio/_backends/_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/anyio/_backends/_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/api/v1/endpoints/datasets.py", line 65, in get_dataset
+    dataset = service.get_dataset(dataset_id)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/services/data_ingestion.py", line 180, in get_dataset
+    dataset = self.db.query(Dataset).filter(Dataset.id == dataset_id).first()
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/orm/query.py", line 2759, in first
+    return self.limit(1)._iter().first()  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/orm/query.py", line 2857, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2351, in execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2249, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/orm/context.py", line 306, in orm_execute_statement
+    result = conn.execute(
+             ^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/sql/elements.py", line 527, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: datasets
+[SQL: SELECT datasets.id AS datasets_id, datasets.filename AS datasets_filename, datasets.file_size AS datasets_file_size, datasets.file_path AS datasets_file_path, datasets.row_count AS datasets_row_count, datasets.column_count AS datasets_column_count, datasets.upload_date AS datasets_upload_date, datasets.risk_score AS datasets_risk_score, datasets.is_loi25_compliant AS datasets_is_loi25_compliant, datasets.is_anonymized AS datasets_is_anonymized, datasets.parent_dataset_id AS datasets_parent_dataset_id, datasets.encoding AS datasets_encoding, datasets.delimiter AS datasets_delimiter 
+FROM datasets 
+WHERE datasets.id = ?
+ LIMIT ? OFFSET ?]
+[parameters: ('00000000000000000000000000000000', 1, 0)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+____________________ TestE2EWorkflow.test_dataset_deletion _____________________
+
+self = <tests.test_e2e_workflow.TestE2EWorkflow object at 0x12bce2110>
+test_csv_path = PosixPath('/Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/tests/fixtures/test_data.csv')
+
+    @pytest.mark.asyncio
+    async def test_dataset_deletion(self, test_csv_path: Path):
+        """Test dataset deletion."""
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Upload dataset
+            with open(test_csv_path, "rb") as f:
+                upload_response = await client.post(
+                    "/api/v1/datasets/upload",
+                    files={"file": ("test_data.csv", f, "text/csv")},
+                )
+    
+>           dataset_id = upload_response.json()["id"]
+E           KeyError: 'id'
+
+tests/test_e2e_workflow.py:281: KeyError
+=============================== warnings summary ===============================
+app/core/database.py:21
+  /Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/core/database.py:21: MovedIn20Warning: The ``declarative_base()`` function is now available as sqlalchemy.orm.declarative_base(). (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    Base = declarative_base()
+
+../../../Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+../../../Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/httpx/_client.py:690
+  /Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/lib/python3.11/site-packages/httpx/_client.py:690: DeprecationWarning: The 'app' shortcut is now deprecated. Use the explicit style 'transport=WSGITransport(app=...)' instead.
+    warnings.warn(message, DeprecationWarning)
+
+tests/test_phase3_visualization.py::TestEdgeCases::test_empty_dataframe
+  /Users/NANAKADIJAKABA/Downloads/outil-anonymisation/backend/app/services/visualization.py:80: RuntimeWarning: invalid value encountered in scalar divide
+    "duplicate_percentage": (df.duplicated().sum() / len(df)) * 100,
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_e2e_workflow.py::TestE2EWorkflow::test_complete_workflow - ...
+FAILED tests/test_e2e_workflow.py::TestE2EWorkflow::test_workflow_with_preview
+FAILED tests/test_e2e_workflow.py::TestE2EWorkflow::test_error_handling - ass...
+FAILED tests/test_e2e_workflow.py::TestE2EWorkflow::test_dataset_deletion - K...
+================== 4 failed, 136 passed, 4 warnings in 2.34s ===================

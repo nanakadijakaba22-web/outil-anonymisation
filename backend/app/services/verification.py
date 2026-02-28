@@ -105,9 +105,11 @@ class PostAnonymizationVerifier:
             if (col_data["sensitivity_type"] if isinstance(col_data, dict) else col_data.sensitivity_type) == DataType.DIRECT_IDENTIFIER
         ]
 
-        # Extract k-anonymity metrics
-        k_value = assessment.details.get("k_anonymity", {}).get("k_value") if assessment.details else None
-        k_violations = assessment.details.get("k_anonymity", {}).get("violations_percentage") if assessment.details else None
+        # Extract k-anonymity metrics from details if present
+        details = assessment.details if assessment.details else {}
+        k_anon_data = details.get("k_anonymity") or {}
+        k_value = k_anon_data.get("k_value")
+        k_violations = k_anon_data.get("violations_percentage")
 
         # Determine pass/fail
         failure_reason = None
@@ -122,6 +124,8 @@ class PostAnonymizationVerifier:
             )
 
         # Check 2: k-anonymity must be >= 5 (if quasi-IDs exist)
+        elif k_value is not None and k_value < self.MIN_K_ANONYMITY:
+            passed = False
             k_violations_msg = f" {k_violations:.1f}% des enregistrements dans des groupes trop petits." if k_violations is not None else ""
             failure_reason = (
                 f"ÉCHEC: k-anonymité insuffisante (k={k_value}). "

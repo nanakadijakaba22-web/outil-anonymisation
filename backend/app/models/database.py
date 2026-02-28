@@ -4,10 +4,10 @@ SQLAlchemy ORM models for database tables.
 import uuid
 import json
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
-from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text, JSON
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -24,18 +24,25 @@ class NumpyJSONEncoder(json.JSONEncoder):
     Custom JSON encoder that handles NumPy types.
     """
 
-    def default(self, obj: Any) -> Any:
-        if isinstance(obj, (np.int64, np.int32, np.int16, np.int8)):
-            return int(obj)
-        if isinstance(obj, (np.float64, np.float32, np.float16)):
-            return float(obj)
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        if isinstance(obj, (datetime, datetime)):
-            return obj.isoformat()
-        if isinstance(obj, uuid.UUID):
-            return str(obj)
-        return super().default(obj)
+    def default(self, o: Any) -> Any:
+        if isinstance(o, (np.int64, np.int32, np.int16, np.int8)):
+            return int(o)
+        if isinstance(o, (np.float64, np.float32, np.float16)):
+            return float(o)
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        if isinstance(o, datetime):
+            return o.isoformat()
+        if isinstance(o, uuid.UUID):
+            return str(o)
+        
+        # Handle Pydantic models
+        if hasattr(o, "model_dump") and callable(o.model_dump):
+            return o.model_dump()
+        elif hasattr(o, "dict") and callable(o.dict):
+            return o.dict()
+            
+        return super().default(o)
 
 
 def json_dumps(obj: Any, **kwargs) -> str:
@@ -101,7 +108,7 @@ class DatasetColumn(Base):
     __tablename__ = "dataset_columns"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False)
+    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False)
 
     # Column information
     name = Column(String(255), nullable=False)
@@ -137,7 +144,7 @@ class AnonymizationJob(Base):
     __tablename__ = "anonymization_jobs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False)
+    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False)
 
     # Job information
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
@@ -174,7 +181,7 @@ class TransformationLog(Base):
     __tablename__ = "transformation_logs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    job_id = Column(UUID(as_uuid=True), ForeignKey("anonymization_jobs.id"), nullable=False)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("anonymization_jobs.id", ondelete="CASCADE"), nullable=False)
 
     # Transformation details
     column_name = Column(String(255), nullable=False)
@@ -209,8 +216,8 @@ class VerificationLog(Base):
     __tablename__ = "verification_logs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    job_id = Column(UUID(as_uuid=True), ForeignKey("anonymization_jobs.id"), nullable=False)
-    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("anonymization_jobs.id", ondelete="CASCADE"), nullable=False)
+    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False)
 
     # Verification timestamp
     verified_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
@@ -244,7 +251,7 @@ class RiskAssessment(Base):
     __tablename__ = "risk_assessments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False)
+    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False)
 
     # Assessment timestamp
     assessed_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
@@ -293,8 +300,8 @@ class SuppressedColumn(Base):
     __tablename__ = "suppressed_columns"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    job_id = Column(UUID(as_uuid=True), ForeignKey("anonymization_jobs.id"), nullable=False)
-    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("anonymization_jobs.id", ondelete="CASCADE"), nullable=False)
+    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False)
 
     # Column information
     column_name = Column(String(255), nullable=False)

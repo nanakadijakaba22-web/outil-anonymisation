@@ -34,31 +34,32 @@ class AIEnhancedDetector(SensitiveDataDetector):
     3. Combine results intelligently
     """
 
-    SYSTEM_PROMPT = """Tu es un expert en protection des données personnelles et en conformité à la Loi 25 du Québec.
+    SYSTEM_PROMPT = """Tu es un expert senior en protection des données personnelles et en conformité à la Loi 25 du Québec.
 
-Ton rôle est de classifier des colonnes de données selon leur sensibilité.
+Ton rôle est de classifier des colonnes de données avec une précision absolue. La Loi 25 exige une protection rigoureuse.
 
-**Types de sensibilité (sensitivity_type)**:
-- "direct_identifier": Identifiants directs uniques (NAS, email, nom complet, téléphone, ID client)
-- "quasi_identifier": Identifiants indirects qui combinés peuvent ré-identifier (âge, code postal, date de naissance, ville)
-- "sensitive": Données sensibles financières, médicales ou d'assurance (revenu, solde, diagnostic)
-- "non_sensitive": Données générales non identifiantes
+**Catégories de sensibilité (sensitivity_type)**:
+1. "direct_identifier": Information qui permet d'identifier directement et de manière unique une personne.
+   - Exemples: NAS, RAMQ, Nom complet, Email, Téléphone, No Passeport, No Permis, ID Client unique, Username.
+2. "quasi_identifier": Information qui, seule, ne permet pas d'identifier, mais qui combinée à d'autres peut ré-identifier.
+   - Exemples: Date de naissance, Code postal, Genre, Ville, Coordonnées GPS, Ethnie, Religion, Age.
+3. "sensitive": Données dont la nature exige une haute protection (financier, médical, assurance).
+   - Exemples: Revenu, Solde bancaire, Diagnostic médical, No de police d'assurance, Code de carte de crédit.
+4. "non_sensitive": Données d'affaires générales ou publiques.
 
-**Catégories (category)**:
-- "personal": Informations personnelles
-- "financial": Données financières
-- "health": Données médicales
-- "insurance": Données d'assurance
-- "other": Autres
+**Instructions de classification**:
+- Sois CONSERVATEUR : Si tu as un doute entre deux catégories, choisis TOUJOURS la plus sensible.
+- Analyse le nom technique de la colonne ET les échantillons de valeurs.
+- Ignore les valeurs nulles ou vides dans ton analyse.
+- La justification doit être courte, en français, et expliquer POURQUOI cette classification a été choisie selon la Loi 25.
 
-**Instructions**:
-1. Analyse le nom de la colonne et les échantillons de valeurs
-2. Détermine le type de sensibilité le plus approprié selon la Loi 25
-3. Choisis la catégorie correspondante
-4. Fournis une justification courte et claire en français
-5. Donne un score de confiance de 0 à 100
-
-Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
+Réponds UNIQUEMENT avec un objet JSON valide suivant cette structure:
+{
+  "sensitivity_type": "direct_identifier|quasi_identifier|sensitive|non_sensitive",
+  "category": "personal|financial|health|insurance|other",
+  "confidence": 0-100,
+  "justification": "..."
+}"""
 
     def __init__(self, db: Session):
         super().__init__(db)
@@ -141,9 +142,9 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
                     f"using AI enhancement"
                 )
 
-                # Get sample values for this column
+                # Get sample values for this column (increased to 20 for better AI analysis)
                 col_data = df[column_name]
-                sample_values = col_data.dropna().head(10).tolist()
+                sample_values = col_data.dropna().head(20).tolist()
 
                 # Get AI classification
                 ai_classification = await self._classify_with_ai(
@@ -156,22 +157,20 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
                 if ai_classification:
                     # Combine rule-based and AI results
                     combined = self._combine_classifications(
-                        rule_based=classification,
+                        rule_based=classification_obj,
                         ai_based=ai_classification,
                     )
 
-                    # Update report and database
+                    # Update report
                     report.columns[column_name] = combined
                     improved_columns += 1
 
                     # Update column in database
-                    # ensure combined is a dict for following access
-                    combined_dict = combined if isinstance(combined, dict) else combined.model_dump()
-                    for column in dataset.columns:
-                        if column.name == column_name:
-                            column.sensitivity_type = combined_dict["sensitivity_type"].value if hasattr(combined_dict["sensitivity_type"], "value") else combined_dict["sensitivity_type"]
-                            column.category = combined_dict["category"].value if hasattr(combined_dict["category"], "value") else combined_dict["category"]
-                            column.confidence = combined_dict["confidence"]
+                    for col in dataset.columns:
+                        if col.name == column_name:
+                            col.sensitivity_type = combined.sensitivity_type.value if hasattr(combined.sensitivity_type, "value") else combined.sensitivity_type
+                            col.category = combined.category.value if hasattr(combined.category, "value") else combined.category
+                            col.confidence = combined.confidence
                             break
 
         # Recalculate summary and risk score
@@ -211,8 +210,8 @@ Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre."""
 
 **Nom de la colonne**: {column_name}
 **Type de données**: {data_type}
-**Échantillons de valeurs** (10 premiers):
-{json.dumps(sample_values[:10], ensure_ascii=False, indent=2)}
+**Échantillons de valeurs** (20 premiers):
+{json.dumps(sample_values[:20], ensure_ascii=False, indent=2)}
 
 **Classification initiale (règles heuristiques)**:
 - Type: {rule_based_result["sensitivity_type"].value if hasattr(rule_based_result["sensitivity_type"], "value") else rule_based_result["sensitivity_type"]}
@@ -274,75 +273,85 @@ Fournis ta classification en JSON avec cette structure exacte:
         Intelligently combine rule-based and AI classifications.
 
         Strategy:
-        - If AI confidence is high (>80), trust AI
-        - If both agree, boost confidence
-        - If they disagree, use weighted average
+        - If AI confidence is very high (>85), trust AI predominantly.
+        - If both agree on sensitivity type, boost confidence significantly.
+        - If AI detects an identifier (DIR/QUASI/SENS) that rules missed, follow AI but with caution.
+        - Use a "most sensitive wins" approach when confidence is comparable.
         """
         # Ensure we work with dicts for uniform subscriptable access
         rb = rule_based if isinstance(rule_based, dict) else rule_based.model_dump()
         ab = ai_based if isinstance(ai_based, dict) else ai_based.model_dump()
 
         # High AI confidence -> trust AI
-        if ab["confidence"] >= 80:
+        if ab["confidence"] >= 85:
             return ColumnClassification(
                 column_name=rb["column_name"],
                 sensitivity_type=ab["sensitivity_type"],
                 category=ab["category"],
-                confidence=min(ab["confidence"] + 5, 100),  # Bonus for AI validation
-                justification=f"{ab['justification']} (confirmé par IA)",
+                confidence=min(ab["confidence"] + 5, 100),
+                justification=f"{ab['justification']} (validé par IA haute-fiance)",
             )
 
         # Both agree -> boost confidence
-        if (rb["sensitivity_type"] == ab["sensitivity_type"] and
-            rb["category"] == ab["category"]):
-            combined_confidence = min(
-                (rb["confidence"] + ab["confidence"]) / 2 + 10,
-                100
-            )
+        if (rb["sensitivity_type"] == ab["sensitivity_type"]):
+             # Agree on sensitivity type, use best category
+            chosen_cat = ab["category"] if ab["confidence"] >= rb["confidence"] else rb["category"]
+            combined_confidence = min(max(rb["confidence"], ab["confidence"]) + 10, 100)
+            
             return ColumnClassification(
                 column_name=rb["column_name"],
                 sensitivity_type=rb["sensitivity_type"],
-                category=rb["category"],
+                category=chosen_cat,
                 confidence=combined_confidence,
-                justification=f"{rb['justification']} + {ab['justification']}",
+                justification=f"{rb['justification']} (confirmé par IA)",
             )
 
-        # Disagree -> weighted average, prefer higher confidence
+        # Disagree -> Conservatism: Prefer the most sensitive detected type if confidence is decent
+        sensitivity_rank = {
+            DataType.DIRECT_IDENTIFIER: 4,
+            DataType.SENSITIVE: 3,
+            DataType.QUASI_IDENTIFIER: 2,
+            DataType.NON_SENSITIVE: 1
+        }
+
+        # Convert simple types to DataType if they are strings
+        rb_type = rb["sensitivity_type"] if not isinstance(rb["sensitivity_type"], str) else DataType(rb["sensitivity_type"])
+        ab_type = ab["sensitivity_type"] if not isinstance(ab["sensitivity_type"], str) else DataType(ab["sensitivity_type"])
+
+        # If AI detected something more sensitive than rules, and AI confidence is > 60%
+        if sensitivity_rank.get(ab_type, 0) > sensitivity_rank.get(rb_type, 0) and ab["confidence"] > 60:
+            return ColumnClassification(
+                column_name=rb["column_name"],
+                sensitivity_type=ab["sensitivity_type"],
+                category=ab["category"],
+                confidence=ab["confidence"],
+                justification=f"{ab['justification']} (Détecté par IA, manqué par règles)",
+            )
+        
+        # Default to weighted average preferring higher confidence
         if rb["confidence"] > ab["confidence"]:
             chosen = rb
-            other = ab
+            justif = f"{rb['justification']} (IA suggérait {ab_type})"
         else:
             chosen = ab
-            other = rb
+            justif = f"{ab['justification']} (Règles suggéraient {rb_type})"
 
         return ColumnClassification(
             column_name=rb["column_name"],
             sensitivity_type=chosen["sensitivity_type"],
             category=chosen["category"],
-            confidence=(chosen["confidence"] * 0.7 + other["confidence"] * 0.3),
-            justification=f"{chosen['justification']} (IA: {other['sensitivity_type'].value if hasattr(other['sensitivity_type'], 'value') else other['sensitivity_type']})",
+            confidence=max(rb["confidence"], ab["confidence"]),
+            justification=justif,
         )
 
     def _recalculate_report(self, report: DetectionReport) -> DetectionReport:
         """Recalculate summary and risk score after AI improvements."""
         # Recalculate summary
         summary = {
-            "direct_identifier": sum(
-                1 for c in report.columns.values()
-                if (c["sensitivity_type"] if isinstance(c, dict) else c.sensitivity_type) == DataType.DIRECT_IDENTIFIER
-            ),
-            "quasi_identifier": sum(
-                1 for c in report.columns.values()
-                if (c["sensitivity_type"] if isinstance(c, dict) else c.sensitivity_type) == DataType.QUASI_IDENTIFIER
-            ),
-            "sensitive": sum(
-                1 for c in report.columns.values()
-                if (c["sensitivity_type"] if isinstance(c, dict) else c.sensitivity_type) == DataType.SENSITIVE
-            ),
-            "non_sensitive": sum(
-                1 for c in report.columns.values()
-                if (c["sensitivity_type"] if isinstance(c, dict) else c.sensitivity_type) == DataType.NON_SENSITIVE
-            ),
+            "direct_identifier": sum(1 for c in report.columns.values() if c.sensitivity_type == DataType.DIRECT_IDENTIFIER),
+            "quasi_identifier": sum(1 for c in report.columns.values() if c.sensitivity_type == DataType.QUASI_IDENTIFIER),
+            "sensitive": sum(1 for c in report.columns.values() if c.sensitivity_type == DataType.SENSITIVE),
+            "non_sensitive": sum(1 for c in report.columns.values() if c.sensitivity_type == DataType.NON_SENSITIVE),
         }
 
         # Recalculate risk score

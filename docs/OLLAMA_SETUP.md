@@ -36,7 +36,7 @@ Ce guide vous accompagne dans l'installation et la configuration d'Ollama pour a
 
 **Minimum**:
 - CPU: Intel i5 / AMD Ryzen 5 ou équivalent
-- RAM: **4 GB** (pour gemma3:4b)
+- RAM: **4 GB** (pour llama3.1:8b)
 - Disque: 5 GB libres
 
 **Recommandé**:
@@ -142,7 +142,7 @@ docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 --name ollama ol
 
 ```bash
 # Télécharger le modèle
-ollama pull gemma3:4b
+ollama pull llama3.1:8b
 ```
 
 **Progression**:
@@ -166,7 +166,7 @@ ollama list
 **Output attendu**:
 ```
 NAME              ID              SIZE    MODIFIED
-gemma3:4b         xxxxxxxx        3.3 GB  5 minutes ago
+llama3.1:8b         xxxxxxxx        3.3 GB  5 minutes ago
 ```
 
 ### Alternatives
@@ -198,7 +198,7 @@ ollama pull llama3.1:8b
 ```bash
 # Ollama Configuration
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=gemma3:4b
+OLLAMA_MODEL=llama3.1:8b
 
 # AI Detection Settings
 ENABLE_AI_DETECTION=true
@@ -255,7 +255,7 @@ curl http://localhost:11434/api/tags
 curl -X POST http://localhost:11434/api/generate \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gemma3:4b",
+    "model": "llama3.1:8b",
     "prompt": "Classify this column: email_address",
     "stream": false
   }'
@@ -285,7 +285,7 @@ docker-compose logs backend | grep -i ollama
 
 **Output attendu**:
 ```
-INFO - Ollama AI detection initialized successfully (model: gemma3:4b)
+INFO - Ollama AI detection initialized successfully (model: llama3.1:8b)
 INFO - AI improved classification for 3 columns
 ```
 
@@ -300,7 +300,7 @@ curl http://localhost:8000/api/v1/health
 {
   "status": "healthy",
   "ai_detection_enabled": true,
-  "ollama_model": "gemma3:4b",
+  "ollama_model": "llama3.1:8b",
   "ollama_available": true
 }
 ```
@@ -346,7 +346,7 @@ lsof -i :11434
 
 **Symptômes**:
 ```
-ERROR - Model gemma3:4b not found
+ERROR - Model llama3.1:8b not found
 ```
 
 **Solutions**:
@@ -356,7 +356,7 @@ ERROR - Model gemma3:4b not found
 ollama list
 
 # Télécharger le modèle manquant
-ollama pull gemma3:4b
+ollama pull llama3.1:8b
 ```
 
 ### Problème 3: Docker ne peut pas accéder à Ollama
@@ -395,7 +395,7 @@ curl http://host.docker.internal:11434/api/tags
 ```bash
 ollama pull llama3.2:3b
 # Mettre à jour .env: OLLAMA_MODEL=llama3.2:3b
-# Note: gemma3:4b est déjà un modèle léger et performant
+# Note: llama3.1:8b est déjà un modèle léger et performant
 ```
 
 2. **Augmenter RAM allouée (Docker)**:
@@ -465,7 +465,7 @@ ENABLE_AI_DETECTION=true
 **Après (Ollama)**:
 ```bash
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=gemma3:4b
+OLLAMA_MODEL=llama3.1:8b
 ENABLE_AI_DETECTION=true
 ```
 
@@ -507,7 +507,7 @@ docker-compose logs backend | grep -E "(Ollama|ollama)"
 **Output attendu**:
 ```
 INFO - Ollama AI detection initialized successfully
-INFO - Using model: gemma3:4b
+INFO - Using model: llama3.1:8b
 ```
 
 ---

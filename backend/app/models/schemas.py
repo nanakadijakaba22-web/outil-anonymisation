@@ -15,9 +15,9 @@ def convert_numpy(obj: Any) -> Any:
     if obj is None:
         return None
     
-    # Handle Pydantic models (nested)
-    if hasattr(obj, "model_dump"):
-        return convert_numpy(obj.model_dump())
+    # DO NOT dump Pydantic models here - let them handle themselves
+    if hasattr(obj, "__pydantic_parent_namespace__") or hasattr(obj, "model_fields"):
+        return obj
         
     if isinstance(obj, dict):
         return {k: convert_numpy(v) for k, v in obj.items()}
@@ -41,7 +41,7 @@ class BaseSchema(BaseModel):
     def handle_numpy_types(self) -> "BaseSchema":
         """Convert all NumPy types in the model to standard Python types."""
         # Convert NumPy types in all fields, including nested ones
-        for field_name in self.model_fields:
+        for field_name in self.__class__.model_fields:
             try:
                 value = getattr(self, field_name)
                 if value is not None:
@@ -251,6 +251,13 @@ class AnonymizationRequest(BaseSchema):
     config: List[AnonymizationConfig]
 
 
+class SampleTransformation(BaseSchema):
+    """Pair of original and anonymized sample data."""
+
+    original: str
+    anonymized: str
+
+
 class TransformationDetail(BaseSchema):
     """Details of a single transformation."""
 
@@ -258,7 +265,12 @@ class TransformationDetail(BaseSchema):
     technique: AnonymizationTechnique
     params: Dict[str, Any]
     values_affected: int
-    sample_transformations: Optional[List[Dict[str, Any]]] = None
+    sample_transformations: Optional[List[SampleTransformation]] = None
+
+
+class TransformationResult(TransformationDetail):
+    """Alias for TransformationDetail used in reporting."""
+    pass
 
 
 class AnonymizationResponse(BaseSchema):
@@ -296,6 +308,7 @@ class RiskAssessmentResponse(BaseSchema):
     overall_score: float = Field(ge=0, le=100)
     overall_level: RiskLevel
     is_loi25_compliant: bool
+    details: Optional[Dict[str, Any]] = None
 
     recommendations: List[str]
     details: Optional[Dict[str, Any]] = None

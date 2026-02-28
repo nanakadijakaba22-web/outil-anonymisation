@@ -285,21 +285,21 @@ class PDFReportGenerator:
             ["Critère", "Score", "Niveau", "Justification"],
             [
                 "Individualisation",
-                f"{risk_assessment.individualization['score']:.1f}%",
-                risk_assessment.individualization['level'].upper(),
-                risk_assessment.individualization['justification'][:60] + "...",
+                f"{risk_assessment.individualization.score:.1f}%",
+                risk_assessment.individualization.level.upper(),
+                risk_assessment.individualization.justification[:60] + "...",
             ],
             [
                 "Corrélation",
-                f"{risk_assessment.correlation['score']:.1f}%",
-                risk_assessment.correlation['level'].upper(),
-                risk_assessment.correlation['justification'][:60] + "...",
+                f"{risk_assessment.correlation.score:.1f}%",
+                risk_assessment.correlation.level.upper(),
+                risk_assessment.correlation.justification[:60] + "...",
             ],
             [
                 "Inférence",
-                f"{risk_assessment.inference['score']:.1f}%",
-                risk_assessment.inference['level'].upper(),
-                risk_assessment.inference['justification'][:60] + "...",
+                f"{risk_assessment.inference.score:.1f}%",
+                risk_assessment.inference.level.upper(),
+                risk_assessment.inference.justification[:60] + "...",
             ],
             [
                 "GLOBAL",
@@ -337,19 +337,19 @@ class PDFReportGenerator:
                         "BACKGROUND",
                         (0, 1),
                         (-1, 1),
-                        get_risk_color(risk_assessment.individualization['level']),
+                        get_risk_color(risk_assessment.individualization.level),
                     ),
                     (
                         "BACKGROUND",
                         (0, 2),
                         (-1, 2),
-                        get_risk_color(risk_assessment.correlation['level']),
+                        get_risk_color(risk_assessment.correlation.level),
                     ),
                     (
                         "BACKGROUND",
                         (0, 3),
                         (-1, 3),
-                        get_risk_color(risk_assessment.inference['level']),
+                        get_risk_color(risk_assessment.inference.level),
                     ),
                     (
                         "BACKGROUND",
@@ -395,7 +395,7 @@ class PDFReportGenerator:
         sensitive_columns = [
             (name, classification)
             for name, classification in detection_report.columns.items()
-            if classification["sensitivity_type"]
+            if classification.sensitivity_type
             in ["direct_identifier", "quasi_identifier", "sensitive"]
         ]
 
@@ -410,10 +410,10 @@ class PDFReportGenerator:
                     [
                         name,
                         self._format_sensitivity_type(
-                            classification["sensitivity_type"]
+                            classification.sensitivity_type
                         ),
-                        classification["category"],
-                        f"{classification['confidence']:.0f}%",
+                        classification.category,
+                        f"{classification.confidence:.0f}%",
                     ]
                 )
 

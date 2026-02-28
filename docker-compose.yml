@@ -39,9 +39,10 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-annoy_db}
       - POSTGRES_PORT=5432
+      - PYTHONPATH=/app
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma3:4b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b}
       - ENABLE_AI_DETECTION=${ENABLE_AI_DETECTION:-true}
       - AI_CONFIDENCE_THRESHOLD=${AI_CONFIDENCE_THRESHOLD:-70.0}
     depends_on:

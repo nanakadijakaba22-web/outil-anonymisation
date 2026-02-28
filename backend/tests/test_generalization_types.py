@@ -124,12 +124,10 @@ class TestGeneralizationTypeDetection:
         print(f"Generalized bins: {result_df['revenu_annuel'].unique()}")
 
         # Assertions
-        # All values should be interval strings like "(44999.945, 56000.0]"
+        # All values should be range strings like "40000-50000"
         for value in result_df['revenu_annuel']:
             assert isinstance(value, str), "Binned values should be strings"
-            assert "(" in value or "[" in value, "Should contain opening bracket"
-            assert "]" in value, "Should contain closing bracket"
-            assert "," in value, "Should contain comma separator"
+            assert "-" in value, "Should contain hyphen separator"
 
         # Should have max 5 unique bins
         unique_bins = result_df['revenu_annuel'].nunique()
@@ -199,16 +197,16 @@ class TestGeneralizationTypeDetection:
         print(f"Generalized years: {result_df['date_naissance'].tolist()}")
 
         # Assertions
-        assert result_df['date_naissance'].iloc[0] == 1985, "Should extract year 1985"
-        assert result_df['date_naissance'].iloc[1] == 1990, "Should extract year 1990"
-        assert result_df['date_naissance'].iloc[2] == 1978, "Should extract year 1978"
-        assert result_df['date_naissance'].iloc[3] == 1995, "Should extract year 1995"
-        assert result_df['date_naissance'].iloc[4] == 1982, "Should extract year 1982"
+        assert result_df['date_naissance'].iloc[0] == "1985", "Should extract year 1985"
+        assert result_df['date_naissance'].iloc[1] == "1990", "Should extract year 1990"
+        assert result_df['date_naissance'].iloc[2] == "1978", "Should extract year 1978"
+        assert result_df['date_naissance'].iloc[3] == "1995", "Should extract year 1995"
+        assert result_df['date_naissance'].iloc[4] == "1982", "Should extract year 1982"
 
-        # All values should be integers (years)
+        # All values should be strings (years)
         for value in result_df['date_naissance']:
-            assert isinstance(value, (int, pd.Int64Dtype)), "Years should be integers"
-            assert 1900 <= value <= 2100, f"Year {value} should be reasonable"
+            assert isinstance(value, str), "Years should be strings for JSON safety"
+            assert "19" in value or "20" in value, f"Year {value} should be reasonable"
 
         print("✓ Datetime year extraction successful")
 
@@ -244,11 +242,11 @@ class TestGeneralizationTypeDetection:
         print(f"Generalized years: {result_df['date_embauche'].tolist()}")
 
         # Assertions
-        assert result_df['date_embauche'].iloc[0] == 2020, "Should extract year 2020"
-        assert result_df['date_embauche'].iloc[1] == 2019, "Should extract year 2019"
-        assert result_df['date_embauche'].iloc[2] == 2021, "Should extract year 2021"
-        assert result_df['date_embauche'].iloc[3] == 2018, "Should extract year 2018"
-        assert result_df['date_embauche'].iloc[4] == 2022, "Should extract year 2022"
+        assert result_df['date_embauche'].iloc[0] == "2020", "Should extract year 2020"
+        assert result_df['date_embauche'].iloc[1] == "2019", "Should extract year 2019"
+        assert result_df['date_embauche'].iloc[2] == "2021", "Should extract year 2021"
+        assert result_df['date_embauche'].iloc[3] == "2018", "Should extract year 2018"
+        assert result_df['date_embauche'].iloc[4] == "2022", "Should extract year 2022"
 
         print("✓ String date year extraction successful")
 
@@ -289,14 +287,14 @@ class TestGeneralizationTypeDetection:
         print(f"Unique years: {sorted(result_df['date_transaction'].unique())}")
 
         # Should extract years 2021, 2022, 2023
-        expected_years = {2021, 2022, 2023}
+        expected_years = {"2021", "2022", "2023"}
         actual_years = set(result_df['date_transaction'].tolist())
 
         assert actual_years == expected_years, f"Expected years {expected_years}, got {actual_years}"
 
         # Verify specific values
-        assert result_df['date_transaction'].iloc[0] == 2023, "First date should be 2023"
-        assert result_df['date_transaction'].iloc[-1] == 2021, "Last date should be 2021"
+        assert result_df['date_transaction'].iloc[0] == "2023", "First date should be 2023"
+        assert result_df['date_transaction'].iloc[-1] == "2021", "Last date should be 2021"
 
         print("✓ ISO date format handling successful")
 
@@ -390,12 +388,12 @@ class TestGeneralizationTypeDetection:
 
         # Assertions for NUMERIC columns (age, revenu_annuel)
         assert isinstance(result_df['age'].iloc[0], str), "NUMERIC: age should be binned (string)"
-        assert "(" in result_df['age'].iloc[0] or "[" in result_df['age'].iloc[0], "NUMERIC: age should be interval"
+        assert "-" in result_df['age'].iloc[0], "NUMERIC: age should be range"
         assert isinstance(result_df['revenu_annuel'].iloc[0], str), "NUMERIC: revenu should be binned"
 
         # Assertions for DATE columns (date_naissance, date_embauche)
-        assert result_df['date_naissance'].iloc[0] == 1988, "DATE: should extract year 1988"
-        assert result_df['date_embauche'].iloc[0] == 2015, "DATE STRING: should extract year 2015"
+        assert result_df['date_naissance'].iloc[0] == "1988", "DATE: should extract year 1988"
+        assert result_df['date_embauche'].iloc[0] == "2015", "DATE STRING: should extract year 2015"
 
         # Verify all original data is transformed
         assert len(result_df) == 5, "Should preserve all rows"
@@ -445,8 +443,8 @@ class TestGeneralizationTypeDetection:
         # Verify non-NULL values are binned (become strings)
         binned_values = result3['avec_nulls'].dropna()
         if len(binned_values) > 0:
-            # At least some values should be binned intervals (strings with brackets)
-            assert any("(" in str(v) or "[" in str(v) for v in binned_values if str(v) != "nan"), \
+            # At least some values should be binned intervals (strings with hyphen)
+            assert any("-" in str(v) for v in binned_values if str(v) != "nan" and str(v) != "Inconnu"), \
                 "Non-NULL values should be binned"
 
         # Edge case 4: Single row
