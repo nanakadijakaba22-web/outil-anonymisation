@@ -90,6 +90,7 @@ class AnonymizationTechnique(str, Enum):
     GENERALIZATION = "generalization"
     SUPPRESSION = "suppression"
     DIFFERENTIAL_PRIVACY = "differential_privacy"
+    KEEP_AS_IS = "keep_as_is"
 
 
 class JobStatus(str, Enum):

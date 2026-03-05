@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import logging
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ class DataIngestionService:
 
     def __init__(self, db: Session):
         self.db = db
+        self.logger = logging.getLogger(__name__)
         self.upload_dir = Path(settings.UPLOAD_DIR)
         self.upload_dir.mkdir(parents=True, exist_ok=True)
 
@@ -44,7 +46,8 @@ class DataIngestionService:
 
         try:
             # Parse CSV with pandas
-            df = self._parse_csv(file_path)
+            # Now returns (df, encoding, delimiter)
+            df, encoding, delimiter = self._parse_csv(file_path)
 
             # Extract metadata
             dataset_create = DatasetCreate(
@@ -53,10 +56,16 @@ class DataIngestionService:
                 file_path=str(file_path),
                 row_count=len(df),
                 column_count=len(df.columns),
+                encoding=encoding,
+                delimiter=delimiter
             )
 
             # Save to database
             dataset = self._create_dataset(dataset_create, df)
+
+            self.logger.info(f"Successfully uploaded dataset {dataset.id}: {file.filename} "
+                             f"({len(df)} rows, {len(df.columns)} columns, "
+                             f"encoding={encoding}, delimiter='{delimiter}')")
 
             # Return response
             return DatasetResponse.model_validate(dataset)
@@ -65,6 +74,8 @@ class DataIngestionService:
             # Clean up file if processing fails
             if file_path.exists():
                 file_path.unlink()
+            
+            self.logger.error(f"Failed to process CSV upload '{file.filename}': {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Failed to process CSV: {str(e)}")
 
     def _validate_file(self, file: UploadFile) -> None:
@@ -101,32 +112,56 @@ class DataIngestionService:
 
         return file_path
 
-    def _parse_csv(self, file_path: Path) -> pd.DataFrame:
+    def _parse_csv(self, file_path: Path) -> tuple[pd.DataFrame, str, str]:
         """
-        Parse CSV file with pandas.
+        Parse CSV file with pandas using automatic detection.
 
-        Handles:
-        - Encoding detection (UTF-8, Latin-1, etc.)
-        - Delimiter detection
-        - Type inference
+        Returns:
+            Tuple of (DataFrame, encoding, delimiter)
         """
-        try:
-            # Try UTF-8 first
-            df = pd.read_csv(file_path, encoding='utf-8')
-        except UnicodeDecodeError:
-            # Fallback to Latin-1
+        encodings = ['utf-8', 'latin-1', 'cp1252']
+        last_error = None
+
+        for encoding in encodings:
             try:
-                df = pd.read_csv(file_path, encoding='latin-1')
-            except Exception as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Failed to parse CSV file: {str(e)}"
+                # Use engine='python' with sep=None for automatic delimiter detection
+                df = pd.read_csv(
+                    file_path, 
+                    encoding=encoding, 
+                    sep=None, 
+                    engine='python',
+                    on_bad_lines='warn'
                 )
+                
+                # Detect delimiter used by python engine
+                # It's stored in the engine object
+                delimiter = ","  # Default if detection fails
+                try:
+                    # Accessing internal pd.read_csv logic for delimiter detection
+                    import csv
+                    sniffer = csv.Sniffer()
+                    with open(file_path, 'r', encoding=encoding) as f:
+                        # Read first 4KB for sniffing
+                        sample = f.read(4096)
+                        dialect = sniffer.sniff(sample, delimiters=',;|\t')
+                        delimiter = dialect.delimiter
+                except Exception:
+                    # Fallback to a common one if sniffer fails
+                    pass
 
-        if df.empty:
-            raise HTTPException(status_code=400, detail="CSV file is empty")
+                if df.empty:
+                    raise HTTPException(status_code=400, detail="CSV file is empty")
 
-        return df
+                return df, encoding, delimiter
+
+            except (UnicodeDecodeError, Exception) as e:
+                last_error = e
+                continue
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to parse CSV file with supported encodings ({', '.join(encodings)}): {str(last_error)}"
+        )
 
     def _create_dataset(self, dataset_create: DatasetCreate, df: pd.DataFrame) -> Dataset:
         """Create dataset and column records in database."""
@@ -195,8 +230,13 @@ class DataIngestionService:
         """
         dataset = self.get_dataset(dataset_id)
 
-        # Load CSV
-        df = pd.read_csv(dataset.file_path, nrows=n_rows)
+        # Load CSV using stored metadata
+        df = pd.read_csv(
+            dataset.file_path, 
+            nrows=n_rows,
+            encoding=dataset.encoding or 'utf-8',
+            sep=dataset.delimiter or ','
+        )
 
         # Convert to list of dicts
         sample_rows = df.to_dict('records')
@@ -228,6 +268,10 @@ class DataIngestionService:
         self.db.commit()
 
     def load_dataframe(self, dataset_id: uuid.UUID) -> pd.DataFrame:
-        """Load full dataset as pandas DataFrame."""
+        """Load full dataset as pandas DataFrame using preserved metadata."""
         dataset = self.get_dataset(dataset_id)
-        return pd.read_csv(dataset.file_path)
+        return pd.read_csv(
+            dataset.file_path,
+            encoding=dataset.encoding or 'utf-8',
+            sep=dataset.delimiter or ','
+        )

@@ -11,7 +11,7 @@ import hashlib
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional, Union
 from uuid import UUID
 
 import numpy as np
@@ -31,6 +31,7 @@ from app.models.schemas import (
     TransformationDetail,
     JobStatus,
     DatasetCreate,
+    DataType,
 )
 from app.services.data_ingestion import DataIngestionService
 from app.services.differential_privacy import DifferentialPrivacyEngine, DPMechanism
@@ -42,6 +43,35 @@ class Anonymizer:
     """
     Anonymization engine implementing Law 25 compliant techniques.
     """
+
+    # QID set definition (columns to include in k-anonymity calculation)
+    QUASI_IDENTIFIERS_SET = {
+        "BIRTHDATE", "AGE", "GENDER", "RACE", "ETHNICITY", "BIRTHPLACE",
+        "ADDRESS", "CITY", "ZIP", "COUNTY", "STATE", "LAT", "LON"
+    }
+
+    DEMOGRAPHIC_HIERARCHIES = {
+        "race": {
+            "white": "Broad Category", "black": "Broad Category", "asian": "Broad Category", 
+            "hispanic": "Broad Category", "native": "Broad Category", "other": "Other"
+        },
+        "ethnicity": {
+            "hispanic": "Hispanic", "non-hispanic": "Non-Hispanic", "latino": "Hispanic"
+        },
+        "gender": {
+            "male": "M", "female": "F", "homme": "M", "femme": "F", "m": "M", "f": "F", "h": "M"
+        },
+        "sexe": {
+            "male": "M", "female": "F", "homme": "M", "femme": "F", "m": "M", "f": "F", "h": "M"
+        }
+    }
+
+    # Location Hierarchy Paths (Escalation)
+    LOCATION_HIERARCHY = {
+        "CITY": "COUNTY",
+        "COUNTY": "STATE",
+        "STATE": None # End of path
+    }
 
     def __init__(self, db: Session):
         self.db = db
@@ -107,6 +137,10 @@ class Anonymizer:
                     sample_transformations=self._ensure_json_serializable(transformation.sample_transformations),
                 )
                 self.db.add(log)
+
+            # === ESCALATION AUTOMATIQUE (LOYER 25) ===
+            # Si le dataset n'est pas k-anonyme (k < 5), on augmente la généralisation
+            df = self._apply_k_anonymity_escalation(df, original_df, config, dataset_id, transformations)
 
             # Save anonymized dataset
             anonymized_dataset = await self._save_anonymized_dataset(
@@ -238,6 +272,11 @@ class Anonymizer:
             df, dp_metadata = self._add_differential_privacy(df, column, params)
             params["dp_metadata"] = dp_metadata  # optional
 
+        elif technique == AnonymizationTechnique.KEEP_AS_IS:
+            # Column is preserved with its original values
+            logger.info(f"Colonne '{column}': Conservation des données (KEEP_AS_IS)")
+            # No changes to df
+
 
         # Get sample after transformations
         if column in df.columns:
@@ -276,38 +315,12 @@ class Anonymizer:
         visible_chars = params.get("visible_chars", 2)
         mask_char = params.get("mask_char", "*")
 
-        def mask_value(val):
-            if pd.isna(val):
-                return val
-
-            val_str = str(val)
-
-            # Email masking: keep local/domain prefixes
-            if "@" in val_str:
-                local, domain = val_str.split("@", 1)
-                if "." in domain:
-                    domain_name, tld = domain.rsplit(".", 1)
-                    masked_local = self._mask_string(local, visible_chars, mask_char)
-                    masked_domain = self._mask_string(domain_name, visible_chars, mask_char)
-                    return f"{masked_local}@{masked_domain}.{tld}"
-
-            # Phone masking: keep area code
-            phone_match = re.match(r"^(\d{3})[-.\s]?(\d{3})[-.\s]?(\d{4})$", val_str)
-            if phone_match:
-                area, prefix, line = phone_match.groups()
-                return f"{area}-{mask_char * 3}-{mask_char * 4}"
-
-            # General string masking
-            return self._mask_string(val_str, visible_chars, mask_char)
-
-        df[column] = df[column].apply(mask_value)
+        df[column] = None
         return df
 
-    def _mask_string(self, s: str, visible: int, mask_char: str) -> str:
-        """Helper to mask a string keeping visible characters at start."""
-        if len(s) <= visible * 2:
-            return mask_char * len(s)
-        return s[:visible] + mask_char * (len(s) - visible)
+    def _mask_string(self, s: str, visible: int, mask_char: str) -> Optional[str]:
+        """Kept for backward compatibility but now returns None as per data integrity rules."""
+        return None
 
     def _generalize_column(
         self,
@@ -318,16 +331,33 @@ class Anonymizer:
         """
         Generalization: Replace with broader categories.
 
-        AUTOMATIC TYPE DETECTION:
-          - Text (string/object) → Prefix mode (garde les N premiers caractères)
-          - Numeric (int/float) → Tranches mode (divise en intervalles)
-          - Dates (datetime) → Range d'années mode (extrait l'année)
-
-        Params:
-          - bins: Nombre de tranches pour les numériques (défaut: 5)
-          - prefix_length: Longueur du préfixe pour le texte (défaut: 3)
-          - range_size: Taille des tranches pour les numériques (optionnel, alternative à bins)
+        AUTOMATIC TYPE DETECTION & STRATEGIES:
+          - Hierarchy: Uses a custom mapping (e.g., GENDER -> Personne)
+          - Numeric (int/float):
+            - Default: Binning or fixed ranges (Age, Expenses)
+            - Coordinates: Rounding to specific precision (Lat/Lon)
+          - Dates: Extract year or broader ranges
+          - Text (string/object):
+            - Prefix mode: Kepp first N characters
+            - Strategy mode: "city_to_region", "address_to_street"
         """
+
+        # 0. Check for explicit hierarchy mapping (Categorical/Text)
+        if "hierarchy" in params and isinstance(params["hierarchy"], dict):
+            logger.info(f"Column '{column}': Using hierarchical generalization")
+            df[column] = df[column].apply(
+                lambda x: self._generalize_hierarchical(x, params["hierarchy"])
+            )
+            return df
+
+        # 1. Check for specific text strategies (City, Address)
+        if "strategy" in params:
+            strategy = params["strategy"]
+            logger.info(f"Column '{column}': Using text strategy '{strategy}'")
+            df[column] = df[column].apply(
+                lambda x: self._generalize_text_strategy(x, strategy)
+            )
+            return df
 
         # === DÉTECTION AUTOMATIQUE DU TYPE AVEC ORDRE DE PRIORITÉ SÉCURISÉ ===
 
@@ -338,43 +368,49 @@ class Anonymizer:
             return df
 
         # 2. Vérifier si c'est numérique (int/float) - PRIORITÉ sur la détection de texte
-        # On traite les nombres d'abord pour éviter que pd.to_datetime ne les transforme en timestamps epoch (1970)
         if pd.api.types.is_numeric_dtype(df[column]):
             logger.info(f"Colonne '{column}': Type NUMÉRIQUE détecté → Mode tranches")
 
-            # Option A: Utiliser bins (nombre de tranches)
-            if "bins" in params or "range_size" not in params:
-                bins = int(params.get("bins", 5))
-                try:
-                    binned = pd.cut(df[column], bins=bins, include_lowest=True, duplicates="drop")
-                    # Formatter les labels: (40, 50] -> "40-50" pour meilleure lisibilité
-                    def format_interval(x):
-                        if pd.isna(x): return "Inconnu"
-                        return f"{int(x.left)}-{int(x.right)}"
-                    
-                    df[column] = binned.apply(format_interval).astype(str)
-                except Exception as e:
-                    logger.warning(f"Échec du binning pour {column}: {e}. Fallback préfixe.")
-                    df[column] = df[column].astype(str).apply(
-                        lambda x: self._generalize_text_prefix(x, 1) if pd.notna(x) else x
-                    )
+            # A. Check for coordinates (Lat/Lon) - prioritize rounding
+            is_coord = "lat" in column.lower() or "lon" in column.lower() or "coord" in column.lower()
+            if is_coord and "bins" not in params and "range_size" not in params:
+                precision = float(params.get("precision", 1)) # Default 1 decimal place
+                df[column] = df[column].apply(lambda x: round(float(x), int(precision)) if pd.notna(x) else x)
                 return df
 
-            # Option B: Utiliser range_size (largeur fixe)
-            else:
-                range_size = int(params.get("range_size", 10))
+            # B. Option: range_size (largeur fixe)
+            if "range_size" in params:
+                range_size = float(params["range_size"])
                 df[column] = df[column].apply(
                     lambda x: self._generalize_to_range(x, range_size) if pd.notna(x) else x
                 )
                 return df
 
+            # C. Option: bins (nombre de tranches, par défaut 5)
+            else:
+                bins = int(params.get("bins", 5))
+                try:
+                    binned = pd.cut(df[column], bins=bins, include_lowest=True, duplicates="drop")
+                    
+                    # Formatter intelligent: Use int if range is large, else float
+                    val_range = df[column].max() - df[column].min()
+                    use_int = val_range > bins
+                    
+                    def format_interval(x):
+                        if pd.isna(x): return np.nan
+                        return x.mid
+                    
+                    df[column] = binned.apply(format_interval)
+                except Exception as e:
+                    logger.warning(f"Échec du binning pour {column}: {e}. Fallback préfixe.")
+                    df[column] = None
+                return df
+
         # 3. Essayer de détecter les dates sous forme de texte (object/string)
-        # On ne tente la conversion QUE si les chaînes contiennent des séparateurs de date courants
         sample = df[column].dropna().head(20).astype(str)
         is_date_string = False
         if len(sample) > 0:
-            # Sécurité: Ne tenter to_datetime que si on voit des séparateurs /-/. 
-            if any(re.search(r'[-/.]', s) for s in sample):
+            if any(re.search(r'[-/.]', s) for s in sample) or all(re.match(r'^\d{4}$', s) for s in sample):
                 try:
                     date_conversion = pd.to_datetime(sample, errors="coerce")
                     if date_conversion.notna().sum() / len(sample) >= 0.7:
@@ -384,14 +420,27 @@ class Anonymizer:
 
         if is_date_string:
             logger.info(f"Colonne '{column}': Dates textuelles détectées → Mode range d'années")
-            df[column] = pd.to_datetime(df[column], errors="coerce").dt.year.fillna("Inconnu").astype(str)
+            # Loi 25: Garder seulement l'année
+            # Loi 25: Garder seulement l'année (numérique)
+            df[column] = pd.to_datetime(df[column], errors="coerce").dt.year
             return df
 
-        # 4. Par défaut: Texte (ou tout autre type non identifié) → Mode préfixe
-        logger.info(f"Colonne '{column}': Traitement par défaut (Type: {df[column].dtype}) → Mode préfixe")
+        # 4. Dérive démographique (Genre, Profession, etc.) -> Regroupement
+        norm_col = column.lower()
+        hierarchy = params.get("hierarchy") or self.DEMOGRAPHIC_HIERARCHIES.get(norm_col)
+        
+        if hierarchy:
+            logger.info(f"Colonne '{column}': Hiérarchie appliquée (Source: {'params' if 'hierarchy' in params else 'default'})")
+            df[column] = df[column].apply(
+                lambda x: self._generalize_hierarchical(x, hierarchy)
+            )
+            return df
+
+        # 5. Par défaut: Texte libre → Mode préfixe
+        logger.info(f"Colonne '{column}': Texte libre détecté (Type: {df[column].dtype}) → Mode préfixe")
         prefix_length = int(params.get("prefix_length", 3))
-        df[column] = df[column].astype(str).apply(
-            lambda x: self._generalize_text_prefix(x, prefix_length) if pd.notna(x) and x != "nan" else x
+        df[column] = df[column].apply(
+            lambda x: self._generalize_text_prefix(x, prefix_length) if pd.notna(x) and x != "nan" else None
         )
 
         return df
@@ -419,20 +468,242 @@ class Anonymizer:
             return None
         return obj
 
-    def _generalize_to_range(self, value: Any, range_size: int) -> str:
+    def _apply_k_anonymity_escalation(
+        self,
+        df: pd.DataFrame,
+        original_df: pd.DataFrame,
+        config: List[AnonymizationConfig],
+        dataset_id: UUID,
+        transformations: List[TransformationDetail],
+        min_k: int = 10,
+        max_iterations: int = 6
+    ) -> pd.DataFrame:
+        """
+        Automatic escalation: Increase generalization if k-anonymity is not met.
+        """
+        # Identify quasi-identifiers from config
+        quasi_ids = [c.column_name for c in config if c.column_name in df.columns]
+        if not quasi_ids:
+            return df
+
+        iteration = 0
+        while iteration < max_iterations:
+            # Calculate current k
+            equivalence_classes = df.groupby(quasi_ids, dropna=False).size()
+            k_min = equivalence_classes.min() if not equivalence_classes.empty else 0
+            
+            if k_min >= min_k:
+                logger.info(f"Objectif k={min_k} atteint.")
+                break
+
+            changed = False
+            for conf in config:
+                col = conf.column_name
+                upper_col = col.upper()
+                if upper_col not in self.QUASI_IDENTIFIERS_SET:
+                    continue
+                    
+                params = conf.params
+                original_col_data = original_df[col]
+
+                # (A) Dates Escalation - REMOVED AGE BIN ESCALATION (Requirement: YEAR ONLY)
+                if upper_col == "BIRTHDATE" or upper_col == "AGE":
+                    # We no longer escalate to age_bin per user request
+                    continue
+
+                # (B) Location Escalation (City -> County -> State)
+                elif upper_col in self.LOCATION_HIERARCHY:
+                    next_level = self.LOCATION_HIERARCHY[upper_col]
+                    if next_level and next_level in df.columns:
+                        logger.info(f"Escalade '{col}': Suppression car niveau supérieur '{next_level}' disponible")
+                        if col in df.columns: 
+                            # Track the drop for transparency
+                            transformations.append(TransformationDetail(
+                                column_name=col,
+                                technique=AnonymizationTechnique.SUPPRESSION,
+                                params={"reason": f"Supprimé pour atteindre k-anonymat (escalade depuis {upper_col})"},
+                                values_affected=len(df)
+                            ))
+                            df.drop(columns=[col], inplace=True)
+                        if col in quasi_ids: quasi_ids.remove(col)
+                        changed = True
+                    elif not next_level:
+                        # End of hierarchy path, if still not k-anonymous, suppress
+                        logger.info(f"Escalade '{col}': Suppression finale (fin de hiérarchie)")
+                        if col in df.columns: 
+                            # Track the drop for transparency
+                            transformations.append(TransformationDetail(
+                                column_name=col,
+                                technique=AnonymizationTechnique.SUPPRESSION,
+                                params={"reason": "Supprimé car fin de hiérarchie atteinte sans k-anonymat"},
+                                values_affected=len(df)
+                            ))
+                            df.drop(columns=[col], inplace=True)
+                        if col in quasi_ids: quasi_ids.remove(col)
+                        changed = True
+
+                # (C) ZIP Escalation (Prefix 3 -> 2)
+                elif upper_col == "ZIP":
+                    current_mode = params.get("mode")
+                    if current_mode == "range":
+                        # Switch to prefix
+                        params["mode"] = "prefix"
+                        params["prefix_length"] = 3
+                        df[col] = original_col_data.astype(str).str[:3]
+                        changed = True
+                    elif params.get("prefix_length") == 3:
+                        params["prefix_length"] = 2
+                        df[col] = original_col_data.astype(str).str[:2]
+                        changed = True
+                    elif params.get("prefix_length") == 2:
+                        if col in df.columns: 
+                            # Track the drop for transparency
+                            transformations.append(TransformationDetail(
+                                column_name=col,
+                                technique=AnonymizationTechnique.SUPPRESSION,
+                                params={"reason": "ZIP supprimé car k-anonymat non atteint avec préfixe 2"},
+                                values_affected=len(df)
+                            ))
+                            df.drop(columns=[col], inplace=True)
+                        if col in quasi_ids: quasi_ids.remove(col)
+                        changed = True
+
+                # (D) Gender Escalation
+                elif upper_col == "GENDER":
+                    if not params.get("grouped"):
+                        params["grouped"] = True
+                        df[col] = "Person"
+                        changed = True
+
+                # (E) Lat/Lon Escalation (Rounding)
+                elif upper_col in ["LAT", "LON"]:
+                    current_size = params.get("range_size", 1.0)
+                    if current_size == 1.0:
+                        params["range_size"] = 10.0 # Very strong rounding
+                        logger.info(f"Escalade '{col}': Rounding 1.0 -> 10.0")
+                        df[col] = original_col_data.apply(lambda x: self._generalize_to_range(x, 10.0))
+                        changed = True
+                    else:
+                        logger.info(f"Escalade '{col}': Suppression")
+                        if col in df.columns: 
+                            # Track the drop for transparency
+                            transformations.append(TransformationDetail(
+                                column_name=col,
+                                technique=AnonymizationTechnique.SUPPRESSION,
+                                params={"reason": f"{col} supprimé pour atteindre k-anonymat"},
+                                values_affected=len(df)
+                            ))
+                            df.drop(columns=[col], inplace=True)
+                        if col in quasi_ids: quasi_ids.remove(col)
+                        changed = True
+
+            if not changed:
+                logger.info("Plus aucune généralisation possible.")
+                break
+            iteration += 1
+            
+        # Final Cleanup before returning to auto_anonymize
+        df = self._cleanup_dataset(df, transformations)
+        return df
+
+    def _generalize_to_range(self, value: Any, range_size: float) -> Union[float, str, None]:
         """Convert numeric value to range string."""
         try:
             num = float(value)
             # Protection against zero range_size
             if range_size <= 0:
                 return str(value)
-            lower = int(num // range_size) * range_size
-            upper = lower + range_size
-            return f"{lower}-{upper}"
+            
+            # Special case: float range_size (for coordinates)
+            if range_size < 1:
+                rounded = round(float(num / range_size)) * range_size
+                return f"{rounded:.4f}".rstrip('0').rstrip('.')
+                
+            lower = (num // range_size) * range_size
+            mid = lower + (range_size / 2)
+            return float(mid)
         except (ValueError, TypeError):
             return str(value)
 
-    def _generalize_text_prefix(self, value: Any, prefix_length: int) -> str:
+    def _generalize_hierarchical(self, value: Any, hierarchy: Dict[str, str]) -> Any:
+        """Apply value mapping from hierarchy definition."""
+        if pd.isna(value):
+            return value
+        
+        # Standardize input for lookup
+        val_str = str(value).lower().strip()
+        result = hierarchy.get(val_str) or hierarchy.get(str(value).strip())
+        
+        # If no direct match, return a fallback or None
+        if result:
+            return result
+            
+        # For now, if no match, return None to ensure it can be pruned if fully empty
+        return None
+
+    def _cleanup_dataset(self, df: pd.DataFrame, transformations: List[TransformationDetail], sparse_threshold: float = 0.95) -> pd.DataFrame:
+        """
+        Final dataset cleanup:
+        1. Remove columns with too many missing values (> sparse_threshold).
+        2. Remove columns that are entirely empty.
+        """
+        initial_cols = set(df.columns)
+        
+        # 1. Remove sparse columns
+        for col in list(df.columns):
+            null_ratio = df[col].isnull().sum() / len(df)
+            if null_ratio > sparse_threshold:
+                logger.info(f"Suppression colonne creuse '{col}' (Ratio NULL: {null_ratio:.2%})")
+                # Track for transparency
+                transformations.append(TransformationDetail(
+                    column_name=col,
+                    technique=AnonymizationTechnique.SUPPRESSION,
+                    params={"reason": f"Supprimé car trop creux (Ratio NULL: {null_ratio:.2%})"},
+                    values_affected=len(df)
+                ))
+                df.drop(columns=[col], inplace=True)
+                
+        # 2. Remove entirely empty columns
+        for col in list(df.columns):
+            if df[col].isnull().all():
+                logger.info(f"Suppression colonne vide '{col}'")
+                # Track for transparency
+                transformations.append(TransformationDetail(
+                    column_name=col,
+                    technique=AnonymizationTechnique.SUPPRESSION,
+                    params={"reason": "Supprimé car vide après anonymisation"},
+                    values_affected=len(df)
+                ))
+                df.drop(columns=[col], inplace=True)
+                
+        removed = initial_cols - set(df.columns)
+        if removed:
+            logger.info(f"Nettoyage final terminé. Colonnes supprimées: {list(removed)}")
+            
+        return df
+
+    def _generalize_text_strategy(self, value: Any, strategy: str) -> Optional[str]:
+        """Apply specific text reduction strategies."""
+        if pd.isna(value):
+            return value
+        
+        val_str = str(value).strip()
+        
+        if strategy == "address_to_street":
+            # "123 Main St, Apt 4" -> "Main St"
+            # Very basic regex: match numbers at start, then the rest until comma or 2nd space
+            match = re.search(r'^\d+\s+([^,]+)', val_str)
+            if match:
+                return match.group(1).split(',')[0].strip()
+            return val_str
+            
+        elif strategy == "city_to_region":
+            # This ideally needs a mapping, but for now we return None (obscured)
+            return None
+            
+        return self._generalize_text_prefix(val_str, 3)
+
+    def _generalize_text_prefix(self, value: Any, prefix_length: int) -> Optional[str]:
         """
         Generalize text by keeping prefix and replacing rest with asterisks.
         
@@ -445,10 +716,11 @@ class Anonymizer:
         
         text_str = str(value).strip()
         
-        # Keep prefix and replace rest with asterisks
+        # Keep prefix and replace rest with None (effectively invalidating the entry for precise matching)
+        # But per requirements, text should remain text. If we can't generalize without mask strings,
+        # and we must avoid mask strings, we return None if it's too sensitive.
         if len(text_str) > prefix_length:
-            prefix = text_str[:prefix_length]
-            return f"{prefix} ***"
+            return None
         else:
             # If too short, just return as is
             return text_str
@@ -468,43 +740,21 @@ class Anonymizer:
         if column not in df.columns:
             return df
 
-        # Capture metadata BEFORE suppression
+        # Capture metadata for SuppressedColumn
         col_data = df[column]
-        col_position = df.columns.get_loc(column)
-        col_dtype = str(col_data.dtype)
-
-        # Statistics
-        row_count = len(col_data)
-        unique_count = int(col_data.nunique())
-        null_count = int(col_data.isnull().sum())
-
-        # Sample values (sanitized - only first 3 for audit)
-        sample_values = col_data.head(3).astype(str).tolist()
-
-        # Create audit trail record
-        suppressed_record = SuppressedColumn(
+        self.db.add(SuppressedColumn(
             job_id=job_id,
             dataset_id=dataset_id,
             column_name=column,
-            column_position=col_position,
-            data_type=col_dtype,
-            row_count=row_count,
-            unique_count=unique_count,
-            null_count=null_count,
-            sample_values=sample_values,
-            reason=f"Suppression technique applied to column '{column}'",
-        )
-
-        self.db.add(suppressed_record)
-        self.db.flush()  # Persist immediately
-
-        logger.info(
-            f"Column '{column}' suppressed from dataset {dataset_id}. "
-            f"Audit record created: {suppressed_record.id}"
-        )
-
-        # Now perform the actual suppression
-        df = df.drop(columns=[column])
+            column_position=df.columns.get_loc(column),
+            data_type=str(col_data.dtype),
+            row_count=len(col_data),
+            reason="Total column suppression"
+        ))
+        
+        # REMOVE COLUMN ENTIRELY from DataFrame to avoid "analysability" issues
+        df.drop(columns=[column], inplace=True)
+        logger.info(f"Colonne '{column}' SUPPRIMÉE du dataset final.")
         return df
 
     
@@ -603,124 +853,110 @@ class Anonymizer:
         configs: List[AnonymizationConfig] = []
         applied_techniques: Dict[str, Any] = {}
 
-        for column_name, classification in detection_report.columns.items():
+        for column_name, cls in detection_report.columns.items():
             config = None
+            upper_col = column_name.upper()
 
-            # =========================================================================
-            # RÈGLE 1: IDENTIFIANTS DIRECTS → SUPPRESSION (toujours, sans exception)
-            # =========================================================================
-            if classification["sensitivity_type"].value == "direct_identifier":
-                # TOUS les identifiants directs sont SUPPRIMÉS (colonne retirée)
-                # Cela inclut: NAS, SSN, email, téléphone, nom, prénom, carte de crédit, etc.
+            # Rule 1: Direct Identifiers (Suppression)
+            # SSN, DRIVERS, PASSPORT, FIRST, LAST, MAIDEN
+            if any(id_keyword in upper_col for id_keyword in ["SSN", "DRIVERS", "PASSPORT", "FIRST", "LAST", "MAIDEN"]):
                 config = AnonymizationConfig(
                     column_name=column_name,
                     technique=AnonymizationTechnique.SUPPRESSION,
                     params={}
                 )
-                logger.info(
-                    f"Identifiant direct '{column_name}' → SUPPRESSION "
-                    f"(justification: {classification['justification']})"
+                logger.info(f"Direct ID '{column_name}' -> SUPPRESSION")
+
+            # Rule 2: Quasi-identifiers (Generalization)
+            elif upper_col in ["BIRTHDATE", "AGE", "DEATHDATE"]:
+                config = AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.GENERALIZATION,
+                    params={"mode": "year" if "DATE" in upper_col else "range", "range_size": 10}
                 )
+                logger.info(f"Quasi-ID '{column_name}' -> GENERALIZATION (to Year)")
 
-            # =========================================================================
-            # RÈGLE 2: DONNÉES SENSIBLES → DP (numérique) ou GENERALIZATION (texte)
-            # =========================================================================
-            elif classification["sensitivity_type"].value == "sensitive":
-                if column_name in df.columns and pd.api.types.is_numeric_dtype(df[column_name]):
-                    # Données sensibles NUMÉRIQUES: Confidentialité différentielle
-                    # epsilon=1.0 = protection MODÉRÉE (Census standard), meilleur équilibre utilité
-                    config = AnonymizationConfig(
-                        column_name=column_name,
-                        technique=AnonymizationTechnique.DIFFERENTIAL_PRIVACY,
-                        params={"epsilon": 1.0, "mechanism": "laplace"}
-                    )
-                    logger.info(
-                        f"Donnée sensible numérique '{column_name}' → DIFFERENTIAL_PRIVACY "
-                        f"(epsilon=1.0, mechanism=laplace)"
-                    )
-                else:
-                    # Données sensibles NON-NUMÉRIQUES: Généralisation par préfixe
-                    config = AnonymizationConfig(
-                        column_name=column_name,
-                        technique=AnonymizationTechnique.GENERALIZATION,
-                        params={"prefix_length": 3}
-                    )
-                    logger.info(
-                        f"Donnée sensible texte '{column_name}' → GENERALIZATION "
-                        f"(prefix_length=3)"
-                    )
+            elif upper_col == "GENDER":
+                config = AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.GENERALIZATION,
+                    params={"hierarchy": self.DEMOGRAPHIC_HIERARCHIES["gender"]}
+                )
+                logger.info(f"Quasi-ID '{column_name}' -> NORMALIZATION (Gender)")
 
-            # =========================================================================
-            # RÈGLE 3: QUASI-IDENTIFIANTS → GENERALIZATION selon le type de données
-            # =========================================================================
-            elif classification["sensitivity_type"].value == "quasi_identifier":
+            elif upper_col == "BIRTHPLACE":
+                # Generalize Birthplace to Country level if possible, else it will be pruned if empty
+                config = AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.GENERALIZATION,
+                    params={"hierarchy": {}} # Empty hierarchy will result in None mapping, pruning the column
+                )
+                logger.info(f"Quasi-ID '{column_name}' -> GENERALIZATION (Birthplace preparation)")
+
+            elif upper_col == "ZIP":
+                config = AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.GENERALIZATION,
+                    params={"mode": "range", "range_size": 100}
+                )
+                logger.info(f"Quasi-ID '{column_name}' -> GENERALIZATION (zip range 100)")
+
+            elif upper_col in ["LAT", "LON"]:
+                config = AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.GENERALIZATION,
+                    params={"mode": "range", "range_size": 1.0}
+                )
+                logger.info(f"Quasi-ID '{column_name}' -> GENERALIZATION (geo range 1.0)")
+
+            elif upper_col == "ADDRESS":
+                config = AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.SUPPRESSION,
+                    params={}
+                )
+                logger.info(f"Quasi-ID '{column_name}' -> SUPPRESSION (Address removed)")
+
+            # Rule 3: Demographic hierarchies
+            elif upper_col in ["RACE", "ETHNICITY"]:
+                config = AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.GENERALIZATION,
+                    params={"hierarchy": self.DEMOGRAPHIC_HIERARCHIES.get(column_name.lower(), {})}
+                )
+                logger.info(f"Demographic '{column_name}' -> GENERALIZATION (hierarchy)")
+
+            # Rule 4 & 5: Keep As-Is
+            # GENDER, MARITAL, CITY, STATE, COUNTY, HEALTHCARE_EXPENSES, HEALTHCARE_COVERAGE
+            elif any(keep in upper_col for keep in [
+                "GENDER", "MARITAL", "CITY", "STATE", "COUNTY", 
+                "HEALTHCARE_EXPENSES", "HEALTHCARE_COVERAGE"
+            ]):
+                config = AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.KEEP_AS_IS,
+                    params={}
+                )
+                logger.info(f"Utility column '{column_name}' -> KEEP AS IS (Technique set)")
+
+            # Fallback for other sensitive/quasi columns not covered by specific rules
+            elif cls.sensitivity_type in [DataType.DIRECT_IDENTIFIER, DataType.SENSITIVE]:
+                config = AnonymizationConfig(
+                    column_name=column_name,
+                    technique=AnonymizationTechnique.SUPPRESSION if cls.sensitivity_type == DataType.DIRECT_IDENTIFIER else AnonymizationTechnique.GENERALIZATION,
+                    params={"prefix_length": 3} if cls.sensitivity_type == DataType.SENSITIVE else {}
+                )
+            
+            elif cls.sensitivity_type == DataType.QUASI_IDENTIFIER:
+                # Generic quasi-identifier handling
                 if column_name in df.columns:
                     col_data = df[column_name]
-
-                    # 3a. Colonnes DATE/DATETIME → Généralisation par année
                     if pd.api.types.is_datetime64_any_dtype(col_data):
-                        config = AnonymizationConfig(
-                            column_name=column_name,
-                            technique=AnonymizationTechnique.GENERALIZATION,
-                            params={"mode": "year"}
-                        )
-                        logger.info(
-                            f"Quasi-identifiant date '{column_name}' → GENERALIZATION (mode=year)"
-                        )
-
-                    # 3b. Détecter les dates sous forme de texte
-                    elif col_data.dtype == "object" or pd.api.types.is_string_dtype(col_data):
-                        sample = col_data.dropna().head(10)
-                        is_date_string = False
-                        if len(sample) > 0:
-                            try:
-                                date_conversion = pd.to_datetime(sample, errors="coerce")
-                                if len(sample) > 0 and date_conversion.notna().sum() / len(sample) >= 0.7:
-                                    is_date_string = True
-                            except (ValueError, TypeError):
-                                pass
-
-                        if is_date_string:
-                            config = AnonymizationConfig(
-                                column_name=column_name,
-                                technique=AnonymizationTechnique.GENERALIZATION,
-                                params={"mode": "year"}
-                            )
-                            logger.info(
-                                f"Quasi-identifiant date (texte) '{column_name}' → GENERALIZATION (mode=year)"
-                            )
-                        else:
-                            # 3c. Colonnes TEXTE → Généralisation par préfixe
-                            config = AnonymizationConfig(
-                                column_name=column_name,
-                                technique=AnonymizationTechnique.GENERALIZATION,
-                                params={"prefix_length": 3}
-                            )
-                            logger.info(
-                                f"Quasi-identifiant texte '{column_name}' → GENERALIZATION (prefix_length=3)"
-                            )
-
-                    # 3d. Colonnes NUMÉRIQUES → Généralisation par tranches (ranges)
+                        config = AnonymizationConfig(column_name=column_name, technique=AnonymizationTechnique.GENERALIZATION, params={"mode": "year"})
                     elif pd.api.types.is_numeric_dtype(col_data):
-                        config = AnonymizationConfig(
-                            column_name=column_name,
-                            technique=AnonymizationTechnique.GENERALIZATION,
-                            params={"mode": "range", "range_size": 10}
-                        )
-                        logger.info(
-                            f"Quasi-identifiant numérique '{column_name}' → GENERALIZATION (mode=range, size=10)"
-                        )
-
-                    # 3e. Fallback: tout autre type → Généralisation par préfixe
+                        config = AnonymizationConfig(column_name=column_name, technique=AnonymizationTechnique.GENERALIZATION, params={"mode": "range", "range_size": 10})
                     else:
-                        config = AnonymizationConfig(
-                            column_name=column_name,
-                            technique=AnonymizationTechnique.GENERALIZATION,
-                            params={"prefix_length": 3}
-                        )
-                        logger.info(
-                            f"Quasi-identifiant (autre) '{column_name}' → GENERALIZATION (prefix_length=3)"
-                        )
+                        config = AnonymizationConfig(column_name=column_name, technique=AnonymizationTechnique.GENERALIZATION, params={"prefix_length": 3})
 
             # Ajouter la configuration si définie
             if config:
@@ -728,8 +964,8 @@ class Anonymizer:
                 applied_techniques[column_name] = {
                     "technique": config.technique.value,
                     "params": config.params,
-                    "reason": classification["sensitivity_type"].value,
-                    "confidence": classification["confidence"]
+                    "reason": cls.sensitivity_type.value,
+                    "confidence": cls.confidence
                 }
 
         # 4. Appliquer l'anonymisation en utilisant la méthode existante

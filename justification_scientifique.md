@@ -42,16 +42,37 @@ La **Loi 25 (Québec)**, via son **Règlement sur l'anonymisation** (entré en v
 | **Seuil d'individualisation** | **15%** | Limite le ratio d'enregistrements uniques (quasi-identifiants). |
 | **Seuil de corrélation** | **20%** | Limite le nombre de colonnes "liables" avec l'extérieur. |
 | **Seuil d'inférence** | **25%** | Limite les corrélations fortes (>0.7) entre colonnes sensibles. |
+| **Seuil de Rareté (Sparsity)** | **95%** | Supprime les colonnes inutilisables et risquées pour l'anonymat (de Montjoye, 2013). |
 
 ---
 
-## 4. Algorithmes et Formules Mathématiques
+## 4. Stratégies de Transformations Avancées
 
-### k-Anonymité (Phase 1 & 2)
+## 4. Stratégies de Transformations Avancées
+
+### Généralisation Hiérarchique (Escalade de k-anonymat)
 **Source :** Sweeney, L. (2002). *k-Anonymity: A Model for Protecting Privacy.*
-Chaque enregistrement doit être indiscernable d'au moins $k$ autres sur la base des quasi-identifiants.
-- **k=5** : Seuil standard acceptable.
-- **k=10** : Recommandé pour les données sensibles.
+L'outil utilise des arbres de hiérarchie pour augmenter l'anonymat sans supprimer la donnée prématurément. Cette technique, appelée **Généralisation Globale**, consiste à remplacer une valeur spécifique par une valeur plus sémantiquement large.
+- **Utilité vs Protection** : Plutôt que de supprimer une colonne entière, l'algorithme "monte" dans la hiérarchie (`Ville` → `Région` → `Province`). Cela minimise la **Perte d'Information (Information Loss)** tout en augmentant la taille des **Classes d'Équivalence**.
+- **Application** : Pour les codes postaux, la réduction de précision (5 vers 3 chiffres) suit le principe de **Troncature de Données** qui est un standard pour les données de santé (HIPAA Safe Harbor).
+
+### Transformation des Dates (YEAR-only)
+**Source :** NIST SP 800-188 et HIPAA Safe Harbor.
+Les dates complètes (JJ/MM/AAAA) sont considérées comme des **Quasi-identifiants à haute entropie**. Selon les travaux de Sweeney, la combinaison du jour de naissance, du sexe et du code postal suffit à identifier 87% de la population américaine.
+- **Justification** : En limitant la donnée à l'**ANNÉE uniquement**, on réduit l'entropie de la colonne d'un facteur d'environ 365. Cela force le regroupement de centaines d'individus dans la même classe d'équivalence temporelle, rendant l'individualisation quasi-impossible sans affecter les analyses de tendances annuelles (utilité statistique).
+
+### Nettoyage Structurel (Suppression des colonnes creuses et vides)
+**Source :** de Montjoye, Y. A., et al. (2013). *Unique in the Crowd.*
+Ce phénomène est lié à la **Malédiction de la Dimensionnalité (Curse of Dimensionality)** en anonymisation. 
+- **Risque des Outliers** : Une colonne qui n'est renseignée que pour 2% de la population (ex: `DEATHDATE` dans un échantillon de personnes majoritairement vivantes) agit comme une "empreinte digitale" pour ces 2%. Même si les quasi-identifiants sont protégés, la simple présence d'une valeur rare permet une identification par **Connaissances de Fond**.
+- **Seuil de 95%** : En supprimant les colonnes ayant plus de 95% de valeurs manquantes, l'outil élimine les vecteurs de corrélation les plus risqués tout en préservant l'intégrité globale du dataset.
+
+### Suppression Totale des Identifiants Directs
+**Source :** WP29 (Opinion 05/2014) et Règlement Loi 25.
+L'outil applique une distinction stricte entre :
+1. **Pseudonymisation** : Masquage partiel (ex: `J*** T***`). Les données restent "personnelles" car le lien existe toujours.
+2. **Anonymisation** : Suppression irréversible. 
+- **Conformité** : Pour sortir du champ d'application de la Loi 25 (et donc pouvoir utiliser les données librement), les identifiants directs **doivent disparaître**. L'outil transforme donc tout masquage d'identifiant en **suppression physique** dans le fichier final pour garantir l'irréversibilité exigée par la CAI.
 
 ### Confidentialité Différentielle (Phase 3)
 **Source :** Dwork, C. (2006). *Differential Privacy.*
@@ -78,3 +99,5 @@ L'application impose un **Risque Résiduel Minimal (0.1% à 1.0%)** même après
 4. **NIST IR 8053 (2015)**. *De-Identification of Personal Information*. National Institute of Standards and Technology.
 5. **CNIL (2020)**. *L'anonymisation de données personnelles*. Guide pratique de la Commission Nationale de l'Informatique et des Libertés.
 6. **Québec (2024)**. *Règlement sur l'anonymisation des renseignements personnels*. Gazette officielle du Québec, 30 mai 2024.
+7. **de Montjoye, Y. A., et al. (2013)**. *Unique in the Crowd: The privacy bounds of human mobility*. Scientific Reports.
+8. **NIST SP 800-188 (Pre-draft)**. *De-Identifying Government Data Sets*. National Institute of Standards and Technology.

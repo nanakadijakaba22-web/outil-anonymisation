@@ -102,7 +102,7 @@ class PostAnonymizationVerifier:
         direct_ids = [
             col_name
             for col_name, col_data in detection.columns.items()
-            if (col_data["sensitivity_type"] if isinstance(col_data, dict) else col_data.sensitivity_type) == DataType.DIRECT_IDENTIFIER
+            if col_data.sensitivity_type == DataType.DIRECT_IDENTIFIER
         ]
 
         # Extract k-anonymity metrics from details if present

@@ -12,50 +12,20 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
-
+from app.core.json_utils import json_dumps
 
 def utc_now():
     """Return current UTC time as timezone-aware datetime."""
     return datetime.now(timezone.utc)
 
-
-class NumpyJSONEncoder(json.JSONEncoder):
-    """
-    Custom JSON encoder that handles NumPy types.
-    """
-
-    def default(self, o: Any) -> Any:
-        if isinstance(o, (np.int64, np.int32, np.int16, np.int8)):
-            return int(o)
-        if isinstance(o, (np.float64, np.float32, np.float16)):
-            return float(o)
-        if isinstance(o, np.ndarray):
-            return o.tolist()
-        if isinstance(o, datetime):
-            return o.isoformat()
-        if isinstance(o, uuid.UUID):
-            return str(o)
-        
-        # Handle Pydantic models
-        if hasattr(o, "model_dump") and callable(o.model_dump):
-            return o.model_dump()
-        elif hasattr(o, "dict") and callable(o.dict):
-            return o.dict()
-            
-        return super().default(o)
-
-
-def json_dumps(obj: Any, **kwargs) -> str:
-    """Custom json.dumps using NumpyJSONEncoder."""
-    return json.dumps(obj, cls=NumpyJSONEncoder, **kwargs)
-
-
 # Custom JSON type for SQLAlchemy that uses our encoder
 class RobustJSON(JSON):
-    """JSON type that handles NumPy types safely."""
+    """JSON type that handles NumPy types safely using shared encoder."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # SQLAlchemy's JSON type will use the engine's json_serializer
+        # but we can also specify it here for being explicit
         self.json_dumps = json_dumps
 
 

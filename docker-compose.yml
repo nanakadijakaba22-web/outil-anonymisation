@@ -51,24 +51,25 @@ services:
     networks:
       - annoy_network
 
-  # Next.js Frontend (optional - can be run separately)
-  # frontend:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.frontend
-  #   container_name: annoy_frontend
-  #   command: npm run dev
-  #   volumes:
-  #     - ./src:/app/src
-  #     - ./public:/app/public
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     - NEXT_PUBLIC_API_URL=http://localhost:8000
-  #   depends_on:
-  #     - backend
-  #   networks:
-  #     - annoy_network
+  # Next.js Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: annoy_frontend
+    command: npm run dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - annoy_network
 
 volumes:
   postgres_data:
