@@ -34,8 +34,6 @@ class TestSensitiveDataDetector(unittest.TestCase):
             ("postalCode", DataType.QUASI_IDENTIFIER),
             ("DateNaissance", DataType.QUASI_IDENTIFIER),
             ("birth_date", DataType.QUASI_IDENTIFIER),
-            ("genre", DataType.QUASI_IDENTIFIER),
-            ("gender", DataType.QUASI_IDENTIFIER),
             ("âge", DataType.QUASI_IDENTIFIER),
         ]
         for name, expected in test_cases:
@@ -50,9 +48,14 @@ class TestSensitiveDataDetector(unittest.TestCase):
             ("annual_income", DataType.SENSITIVE, Category.FINANCIAL),
             ("diagnostic_médical", DataType.SENSITIVE, Category.HEALTH),
             ("medical_history", DataType.SENSITIVE, Category.HEALTH),
-            ("opinion_politique", DataType.SENSITIVE, Category.OTHER),
-            ("political_affiliation", DataType.SENSITIVE, Category.OTHER),
-            ("religion", DataType.SENSITIVE, Category.OTHER),
+            ("opinion_politique", DataType.SENSITIVE, Category.PERSONAL),
+            ("political_affiliation", DataType.SENSITIVE, Category.PERSONAL),
+            ("religion", DataType.SENSITIVE, Category.PERSONAL),
+            ("genre", DataType.SENSITIVE, Category.PERSONAL),
+            ("gender", DataType.SENSITIVE, Category.PERSONAL),
+            ("ethnicity", DataType.SENSITIVE, Category.PERSONAL),
+            ("race", DataType.SENSITIVE, Category.PERSONAL),
+            ("healthcare_expenses", DataType.SENSITIVE, Category.FINANCIAL),
         ]
         for name, expected_type, expected_cat in test_cases:
             with self.subTest(name=name):

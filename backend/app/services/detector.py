@@ -100,8 +100,6 @@ class SensitiveDataDetector:
         "QUASI": [
             "date_naissance", "birthdate", "dob", "birth_date", "naissance", "born", "birthday", "dateofbirth",
             "age", "age_at", "tranche_age", "annee_naissance", "birth_year",
-            "genre", "gender", "sexe", "sex", "orientation",
-            "race", "ethnie", "ethnicity", "origine", "origin", "ancestry", "origine_ethnique", "ethnic_origin",
             "profession", "metier", "job", "occupation", "work", "title", "titre", "poste", "position",
             "employeur", "employer", "scolarite", "education", "degree", "diplome",
             "etat_civil", "marital_status", "statut_matrimonial", "mariage", "conjoint", "spouse",
@@ -113,7 +111,8 @@ class SensitiveDataDetector:
         ],
 
         # Sensitive data - Nature is sensitive (Finance, Health, Criminal, Opinion, Law 25)
-        # Note: Religion and Orientation are sensitive under Law 25
+        # Note: Law 25 Article 110 defines sensitive information as:
+        # medical, financial, biometric, or otherwise intimate info (religion, orientation, etc.)
         "SENSITIVE": [
             # Financial
             "revenu", "income", "salary", "salaire", "wage", "earnings", "remuneration",
@@ -121,13 +120,17 @@ class SensitiveDataDetector:
             "compte_bancaire", "bank_account", "numero_compte", "account_number",
             "credit_score", "creditscore", "scorecredit", "cote_credit", "rating",
             "debt", "dette", "emprunt", "loan", "hypotheque",
+            "expenses", "depenses", "medical_costs", "healthcare_expenses",
             # Health
             "medical", "health", "sante", "diagnostic", "maladie", "disease", "medical_condition",
             "condition", "pathology", "traitement", "treatment", "medicament", "medication", "drug",
             "ordonnance", "symptome", "resultat", "analyse", "test", "medecin", "doctor", "clinique", "hospital", "hospitalisation",
-            # Biometric
-            "empreinte", "fingerprint", "visage", "facial", "biometric", "biometrie", "iris", "faceid", "adn", "dna", "genetic",
-            # Opinions & Social (Law 25)
+            # Biometric & Genetic
+            "empreinte", "fingerprint", "visage", "facial", "biometric", "biometrie", "iris", "faceid", "adn", "dna", "genetic", "genetique",
+            # Origin & Demographics (Sensitive under Law 25)
+            "race", "ethnie", "ethnicity", "origine", "origin", "ancestry", "origine_ethnique", "ethnic_origin",
+            # Intimate info & Opinions (Law 25)
+            "genre", "gender", "sexe", "sex",
             "opinion", "politique", "political", "parti", "party", "vote", "affiliation", "political_opinion", "parti_politique", "political_affiliation",
             "philosophy", "philosophie", "religion", "croyance", "belief", "faith", "religious_belief",
             "vie_privee", "privacy", "intimacy", "sexual", "sexuel", "sexual_orientation", "orientation_sexuelle",
@@ -396,14 +399,14 @@ class SensitiveDataDetector:
             if keyword == normalized_name or f"_{keyword}" in normalized_name or f"{keyword}_" in normalized_name:
                 # Sub-categorization
                 cat = Category.OTHER
-                if any(k in normalized_name for k in ["revenu", "income", "salaire", "salary", "account", "compte", "bank", "bancaire", "credit", "debt", "dette"]):
+                if any(k in normalized_name for k in ["revenu", "income", "salaire", "salary", "account", "compte", "bank", "bancaire", "credit", "debt", "dette", "expense", "depense"]):
                     cat = Category.FINANCIAL
                 elif any(k in normalized_name for k in ["medical", "health", "sante", "maladie", "disease", "treatment", "traitement", "hospital"]):
                     cat = Category.HEALTH
                 elif any(k in normalized_name for k in ["biometric", "biometrie", "empreinte", "fingerprint", "dna", "adn", "genetic", "faceid", "iris"]):
                     cat = Category.HEALTH # Biometrics categorized under Health/Personal
-                elif any(k in normalized_name for k in ["religion", "political", "politique", "sexual", "orientation"]):
-                    cat = Category.OTHER # Sensitive Opinions/Orientation
+                elif any(k in normalized_name for k in ["religion", "political", "politique", "sexual", "orientation", "gender", "genre", "sexe", "race", "ethni", "origin"]):
+                    cat = Category.PERSONAL # Law 25 Sensitive info (Intimate/Demographic)
                 
                 return (DataType.SENSITIVE, cat, 85.0)
 

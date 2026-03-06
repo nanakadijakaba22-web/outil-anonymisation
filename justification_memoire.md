@@ -154,8 +154,6 @@ Les coordonnées géographiques sont généralisées par réduction progressive 
 Arrondi à 1 décimale → Arrondi à 0 décimale → Suppression.
 La réduction de précision spatiale permet de limiter les attaques de réidentification basées sur la localisation (Narayanan & Shmatikov, 2008). Référence : Arvind Narayanan.
 
-⸻
-
 ### 4.3 Confidentialité Différentielle (Differential Privacy)
 
 Pour certaines variables numériques sensibles, l’outil implémente un mécanisme de confidentialité différentielle basé sur le mécanisme de Laplace, introduit par Cynthia Dwork (Dwork, 2006).
@@ -185,6 +183,28 @@ Chaque opération génère des métadonnées stockées dans la base :
 - `SuppressedColumn` : Registre des données jugées trop risquées et supprimées.
 - `VerificationLog` : Preuve de conformité signée temporellement.
 
+### 5.3 Rapport d’anonymisation et Preuve de Conformité
+
+Le rapport généré après le processus d’anonymisation constitue un élément essentiel du mécanisme de conformité aux exigences de la Loi 25 du Québec sur la protection des renseignements personnels. En effet, la réglementation exige que l’organisation soit en mesure de démontrer que les données ont été traitées de manière à réduire le risque de réidentification à un niveau très faible avant toute utilisation secondaire.
+
+Dans cette optique, le rapport d’anonymisation produit par l’outil documente de manière structurée l’ensemble de l’analyse effectuée sur le dataset. Il présente d’abord un sommaire exécutif indiquant le niveau global de risque et la décision de conformité, puis une évaluation détaillée des trois critères de risque reconnus dans la littérature scientifique et par les autorités européennes, à savoir l’individualisation, la corrélation (ou liaison) et l’inférence, tels que définis dans l’Opinion 05/2014 du Groupe de travail Article 29 sur les techniques d’anonymisation.
+
+Le rapport inclut également la détection des identifiants directs, quasi-identifiants et données sensibles, afin de documenter les catégories d’informations présentes dans le dataset et les transformations appliquées. Des analyses statistiques complémentaires sont aussi produites, notamment la distribution des variables, la détection de valeurs aberrantes et l’analyse de corrélation, afin de vérifier que l’anonymisation réduit efficacement les risques tout en conservant une utilité analytique minimale des données.
+
+L’objectif de ce rapport est donc double : assurer la traçabilité du processus d’anonymisation et fournir une preuve documentaire que le risque résiduel de réidentification est faible, ce qui correspond aux principes reconnus dans les travaux scientifiques sur l’anonymisation des données (Sweeney, 2002 ; Machanavajjhala et al., 2007 ; El Emam, 2013) ainsi qu’aux recommandations du Groupe de travail Article 29 (2014) relatives à l’évaluation du risque dans les processus d’anonymisation.
+
+---
+
+## Chapitre 6 : Validation Expérimentale (Cas d'utilisation "Parents")
+
+Les variables présentées dans les visualisations du rapport d’anonymisation ont été sélectionnées en raison de leur importance pour l’évaluation du risque de réidentification et pour la préservation de l’utilité analytique du jeu de données.
+
+Certaines colonnes, telles que BIRTHDATE, RACE, ETHNICITY et GENDER, sont identifiées comme quasi-identifiants, c’est-à-dire des attributs qui, lorsqu’ils sont combinés avec d’autres informations externes, peuvent permettre d’isoler ou de réidentifier un individu. La littérature scientifique montre que des attributs démographiques comme la date de naissance, le genre ou la localisation peuvent fortement contribuer à la réidentification des individus dans un dataset (Sweeney, 2002).
+
+Par ailleurs, certaines variables numériques telles que HEALTHCARE_EXPENSES ou HEALTHCARE_COVERAGE sont également analysées afin de vérifier que les transformations appliquées lors du processus d’anonymisation (généralisation, suppression ou ajout de bruit) ne détruisent pas la structure statistique des données. Cette analyse permet d’évaluer le compromis entre protection de la vie privée et utilité des données (privacy-utility trade-off), principe largement reconnu dans la littérature sur l’anonymisation des données (El Emam, 2013 ; Article 29 Working Party, 2014).
+
+Les graphiques de distribution permettent également de détecter d’éventuelles valeurs aberrantes (outliers) et de vérifier l’absence de corrélations fortes pouvant favoriser des attaques par inférence, conformément aux recommandations du Groupe de travail Article 29 dans l’Opinion 05/2014 sur les techniques d’anonymisation.
+
 ---
 
 ## Bibliographie Sélective (APA)
@@ -205,3 +225,4 @@ Chaque opération génère des métadonnées stockées dans la base :
 - **Mühlbauer, M. D. J. H., & Boncz, P. A. (2017)**. *Multi-Hypothesis CSV Parsing*. 
 - **Rahm, E., & Do, H. H. (2000)**. *Data cleaning: Problems and current approaches*. IEEE Data Engineering Bulletin.
 - **Gouvernement du Québec (2024)**. *Règlement sur l'anonymisation des renseignements personnels*.
+- **Article 29 Working Party (2014)**. *Opinion 05/2014 on Anonymisation Techniques*.
