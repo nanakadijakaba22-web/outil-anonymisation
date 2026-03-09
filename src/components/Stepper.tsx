@@ -126,10 +126,9 @@ export default function Stepper({
                     className={`
                       w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg
                       transition-all duration-200 border-2
-                      ${
-                        isCompleted
-                          ? 'bg-green-600 text-white border-green-600'
-                          : isActive
+                      ${isCompleted
+                        ? 'bg-green-600 text-white border-green-600'
+                        : isActive
                           ? 'bg-blue-600 text-white border-blue-600 ring-4 ring-blue-100'
                           : 'bg-gray-100 text-gray-400 border-gray-300'
                       }
@@ -184,10 +183,9 @@ export default function Stepper({
                     <div
                       className={`
                         h-full rounded transition-all duration-300
-                        ${
-                          isStepCompleted(steps[index + 1].id) || isCompleted
-                            ? 'bg-green-600'
-                            : isActive
+                        ${isStepCompleted(steps[index + 1].id) || isCompleted
+                          ? 'bg-green-600'
+                          : isActive
                             ? 'bg-gradient-to-r from-blue-600 to-gray-300'
                             : 'bg-gray-300'
                         }
@@ -208,7 +206,7 @@ export default function Stepper({
             Étape {getCurrentStepIndex() + 1} sur {steps.length}
           </div>
           <div className="text-sm text-gray-500">
-            {Math.round(((completedSteps.length + 1) / steps.length) * 100)}% complété
+            {Math.round(((getCurrentStepIndex() + 1) / steps.length) * 100)}% complété
           </div>
         </div>
 

@@ -121,12 +121,13 @@ export function formatTechnique(technique: string): string {
     case 'masking':
       return 'Suppression';
     case 'generalization':
-      return 'Generalisation';
+      return 'Généralisation';
     case 'suppression':
       return 'Suppression';
     case 'differential_privacy':
-      return 'Confidentialite differentielle';
+      return 'Confidentialité différentielle';
     case 'none':
+    case 'keep_as_is':
       return 'Aucune';
     default:
       return technique;
@@ -143,64 +144,70 @@ export function formatTechniqueWithParams(
 
   switch (technique) {
     case 'suppression':
+    case 'masking': // Often used interchangeably for total removal in this context
       return 'Suppression totale';
 
-    case 'masking':
-      return 'Suppression';
-
     case 'differential_privacy':
-      // Epsilon 1.0 = confidentialité modérée (Census Bureau standard)
-      // Plus epsilon est petit, plus la confidentialité est forte
-      return 'Confidentialite diff. (ε=1.0, securite modérée)';
+      return 'Confidentialité diff. (ε=1.0, sécurité modérée)';
 
     case 'generalization':
-      // 1. Dates: généralisation par année
+      // 1. Dates (BIRTHDATE, DEATHDATE, etc.)
       if (lowerName.includes('date') || lowerName.includes('naissance')) {
-        return 'Generalisation date (annee uniquement)';
+        return 'Année uniquement';
       }
 
-      // 2. Colonnes textuelles: généralisation par préfixe
+      // 2. Race / Ethnie / Genre (Hierarchies/Categorical)
+      if (
+        lowerName.includes('race') ||
+        lowerName.includes('ethnie') ||
+        lowerName.includes('ethnicity')
+      ) {
+        return 'Regroupement de catégories';
+      }
+
+      if (lowerName.includes('gender') || lowerName.includes('sexe')) {
+        return 'Normalisation catégorielle';
+      }
+
+      // 3. Géographie (ZIP, CITY, COUNTY, STATE, LAT, LON)
       if (
         lowerName.includes('ville') ||
-        lowerName.includes('adresse') ||
-        lowerName.includes('rue') ||
-        lowerName.includes('profession') ||
-        lowerName.includes('emploi') ||
-        lowerName.includes('titre') ||
+        lowerName.includes('city') ||
+        lowerName.includes('town') ||
+        lowerName.includes('postal') ||
+        lowerName.includes('zip') ||
+        lowerName.includes('county') ||
+        lowerName.includes('comté') ||
+        lowerName.includes('state') ||
+        lowerName.includes('état') ||
         lowerName.includes('region') ||
-        lowerName.includes('pays')
+        lowerName.includes('pays') ||
+        lowerName.includes('lat') ||
+        lowerName.includes('lon')
       ) {
-        return 'Generalisation texte (prefixe 3 car.)';
+        return 'Généralisation géographique (escalade possible)';
       }
 
-      // 3. Code postal: préfixe spécial (3 premiers caractères)
-      if (lowerName.includes('code_postal') || lowerName.includes('postal')) {
-        return 'Generalisation (prefixe 3 car.)';
+      // 4. Age and Numeric Tranches
+      if (lowerName.includes('age')) {
+        return 'Tranches d\'âge (10 ans)';
       }
 
-      // 4. Colonnes numériques: généralisation par tranches
-      if (
-        lowerName.includes('age') ||
-        lowerName.includes('annee') ||
-        lowerName.includes('montant') ||
-        lowerName.includes('nombre') ||
-        lowerName.includes('revenu') ||
-        lowerName.includes('salaire') ||
-        lowerName.includes('solde') ||
-        sensitivityType === 'quasi_identifier' ||
-        sensitivityType === 'sensitive'
-      ) {
-        return 'Generalisation numerique (tranches de 10)';
+      const numericKeywords = [
+        'montant', 'nombre', 'revenu', 'salaire', 'solde', 'expenses', 'coverage'
+      ];
+      if (numericKeywords.some(key => lowerName.includes(key))) {
+        return 'Généralisation par tranches';
       }
 
-      // Default for other text columns
-      return 'Generalisation texte (prefixe 3 car.)';
+      // 5. Default: Prefix masking for other quasi-ids or sensitive text
+      return 'Masquage (3 premiers car.)';
 
     case 'none':
       return 'Aucune transformation';
 
     default:
-      return technique;
+      return technique.charAt(0).toUpperCase() + technique.slice(1).replace('_', ' ');
   }
 }
 

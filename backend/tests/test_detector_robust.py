@@ -51,8 +51,6 @@ class TestSensitiveDataDetector(unittest.TestCase):
             ("opinion_politique", DataType.SENSITIVE, Category.PERSONAL),
             ("political_affiliation", DataType.SENSITIVE, Category.PERSONAL),
             ("religion", DataType.SENSITIVE, Category.PERSONAL),
-            ("genre", DataType.SENSITIVE, Category.PERSONAL),
-            ("gender", DataType.SENSITIVE, Category.PERSONAL),
             ("ethnicity", DataType.SENSITIVE, Category.PERSONAL),
             ("race", DataType.SENSITIVE, Category.PERSONAL),
             ("healthcare_expenses", DataType.SENSITIVE, Category.FINANCIAL),
@@ -62,6 +60,19 @@ class TestSensitiveDataDetector(unittest.TestCase):
                 res = self.detector.detect_column_type(name, [], 0.0, "float")
                 self.assertEqual(res.sensitivity_type, expected_type, f"Type failed for {name}")
                 self.assertEqual(res.category, expected_cat, f"Category failed for {name}")
+
+    def test_detect_column_type_by_name_quasi_demographic(self):
+        # Test demographic quasi-identifiers (refined rules)
+        test_cases = [
+            ("genre", DataType.QUASI_IDENTIFIER),
+            ("gender", DataType.QUASI_IDENTIFIER),
+            ("sexe", DataType.QUASI_IDENTIFIER),
+            ("sex", DataType.QUASI_IDENTIFIER),
+        ]
+        for name, expected in test_cases:
+            with self.subTest(name=name):
+                res = self.detector.detect_column_type(name, [], 0.0, "object")
+                self.assertEqual(res.sensitivity_type, expected, f"Failed for {name}")
 
     def test_detect_column_type_by_pattern_nas(self):
         # Test pattern detection: NAS (valid Luhn)

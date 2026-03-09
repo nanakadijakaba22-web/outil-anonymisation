@@ -156,7 +156,6 @@ class PDFReportGenerator:
 
         # Data visualization section (if available)
         if visualization_data:
-            story.append(PageBreak())
             story.extend(self._build_visualization_section(visualization_data))
             story.append(Spacer(1, 0.3 * inch))
 
@@ -287,30 +286,30 @@ class PDFReportGenerator:
                 "Individualisation",
                 f"{risk_assessment.individualization.score:.1f}%",
                 risk_assessment.individualization.level.upper(),
-                risk_assessment.individualization.justification[:60] + "...",
+                Paragraph(risk_assessment.individualization.justification, self.styles["Normal"]),
             ],
             [
                 "Corrélation",
                 f"{risk_assessment.correlation.score:.1f}%",
                 risk_assessment.correlation.level.upper(),
-                risk_assessment.correlation.justification[:60] + "...",
+                Paragraph(risk_assessment.correlation.justification, self.styles["Normal"]),
             ],
             [
                 "Inférence",
                 f"{risk_assessment.inference.score:.1f}%",
                 risk_assessment.inference.level.upper(),
-                risk_assessment.inference.justification[:60] + "...",
+                Paragraph(risk_assessment.inference.justification, self.styles["Normal"]),
             ],
             [
                 "GLOBAL",
                 f"{risk_assessment.overall_score:.1f}%",
                 risk_assessment.overall_level.upper(),
-                "Score pondéré des trois critères",
+                Paragraph("Score pondéré des trois critères", self.styles["Normal"]),
             ],
         ]
 
         risk_table = Table(
-            risk_data, colWidths=[1.5 * inch, 0.8 * inch, 0.8 * inch, 3.4 * inch]
+            risk_data, colWidths=[1.2 * inch, 0.7 * inch, 0.7 * inch, 3.9 * inch]
         )
 
         # Color coding based on risk level
@@ -405,10 +404,10 @@ class PDFReportGenerator:
             )
 
             column_data = [["Colonne", "Type", "Catégorie", "Confiance"]]
-            for name, classification in sensitive_columns[:15]:  # Limit to 15
+            for name, classification in sensitive_columns[:20]:  # Limit to 20
                 column_data.append(
                     [
-                        name,
+                        Paragraph(name, self.styles["Normal"]),
                         self._format_sensitivity_type(
                             classification.sensitivity_type
                         ),
@@ -418,7 +417,7 @@ class PDFReportGenerator:
                 )
 
             column_table = Table(
-                column_data, colWidths=[2 * inch, 1.8 * inch, 1.2 * inch, 0.8 * inch]
+                column_data, colWidths=[1.8 * inch, 1.8 * inch, 1.7 * inch, 1.2 * inch]
             )
             column_table.setStyle(
                 TableStyle(
@@ -462,15 +461,16 @@ class PDFReportGenerator:
         # Transformations table
         transform_data = [["Colonne", "Technique", "Valeurs affectées", "Exemple"]]
 
-        for transform in anonymization_response.transformations[:15]:  # Limit to 15
+        for transform in anonymization_response.transformations[:20]:  # Limit to 20
             example = ""
             if transform["sample_transformations"]:
                 sample = transform["sample_transformations"][0]
-                example = f"{sample['original'][:20]} → {sample['anonymized'][:20]}"
+                example_text = f"<b>{sample['original']}</b><br/>→ {sample['anonymized']}"
+                example = Paragraph(example_text, self.styles["Normal"])
 
             transform_data.append(
                 [
-                    transform["column_name"],
+                    Paragraph(transform["column_name"], self.styles["Normal"]),
                     self._format_technique(transform["technique"]),
                     str(transform["values_affected"]),
                     example,
@@ -478,7 +478,7 @@ class PDFReportGenerator:
             )
 
         transform_table = Table(
-            transform_data, colWidths=[1.5 * inch, 1.3 * inch, 1 * inch, 2.7 * inch]
+            transform_data, colWidths=[1.2 * inch, 1.3 * inch, 0.7 * inch, 3.3 * inch]
         )
         transform_table.setStyle(
             TableStyle(

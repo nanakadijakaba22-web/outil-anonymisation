@@ -14,10 +14,8 @@ export default function ProgressBadge({ currentStep, completedSteps }: ProgressB
   const totalSteps = stepOrder.length;
 
   // Calculate progress percentage
-  // Current step counts as in-progress, so we count completed + 0.5 for current
-  const progressPercentage = Math.round(
-    ((completedSteps.length + 0.5) / totalSteps) * 100
-  );
+  // Each step is 25% (for 4 steps)
+  const progressPercentage = Math.round(((currentIndex + 1) / totalSteps) * 100);
 
   // Determine status and color
   const isComplete = completedSteps.includes(currentStep);
@@ -54,7 +52,7 @@ export default function ProgressBadge({ currentStep, completedSteps }: ProgressB
             {progressPercentage}%
           </span>
           <span className="text-xs text-gray-500 ml-2">
-            ({completedSteps.length}/{totalSteps})
+            ({currentIndex + 1}/{totalSteps})
           </span>
         </div>
       </div>

@@ -42,9 +42,9 @@ Ton rôle est de classifier des colonnes de données avec une précision absolue
 1. "direct_identifier": Information qui permet d'identifier directement et de manière unique une personne.
    - Exemples: NAS, RAMQ, Nom complet, Email, Téléphone, No Passeport, No Permis, ID Client unique, Username.
 2. "quasi_identifier": Information qui, seule, ne permet pas d'identifier, mais qui combinée à d'autres peut ré-identifier.
-   - Exemples: Date de naissance, Code postal, Genre, Ville, Coordonnées GPS, Ethnie, Religion, Age.
-3. "sensitive": Données dont la nature exige une haute protection (financier, médical, assurance).
-   - Exemples: Revenu, Solde bancaire, Diagnostic médical, No de police d'assurance, Code de carte de crédit.
+   - Exemples: Date de naissance, Code postal, Genre, Ville, Coordonnées GPS, Age.
+3. "sensitive": Données dont la nature exige une haute protection (financier, médical, assurance, origine).
+   - Exemples: Revenu, Solde bancaire, Diagnostic médical, No de police d'assurance, Ethnie, Race, Religion, Orientation sexuelle.
 4. "non_sensitive": Données d'affaires générales ou publiques.
 
 **Instructions de classification**:

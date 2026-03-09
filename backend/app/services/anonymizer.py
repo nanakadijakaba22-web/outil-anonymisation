@@ -52,11 +52,11 @@ class Anonymizer:
 
     DEMOGRAPHIC_HIERARCHIES = {
         "race": {
-            "white": "Broad Category", "black": "Broad Category", "asian": "Broad Category", 
-            "hispanic": "Broad Category", "native": "Broad Category", "other": "Other"
+            "white": "Caucaisien/Autre", "black": "Afro-descendant/Autre", "asian": "Asiatique/Autre", 
+            "hispanic": "Latino/Autre", "native": "Autochtone/Autre", "other": "Autre"
         },
         "ethnicity": {
-            "hispanic": "Hispanic", "non-hispanic": "Non-Hispanic", "latino": "Hispanic"
+            "hispanic": "Hispano-Latino", "non-hispanic": "Non-Hispano-Latino", "latino": "Hispano-Latino"
         },
         "gender": {
             "male": "M", "female": "F", "homme": "M", "femme": "F", "m": "M", "f": "F", "h": "M"
@@ -249,8 +249,11 @@ class Anonymizer:
         sample_before = original_df[column].head(5).tolist()
 
         if technique == AnonymizationTechnique.MASKING:
-            df = self._mask_column(df, column, params)
-
+            visible_chars = params.get("visible_chars", 2)
+            mask_char = params.get("mask_char", "*")
+            df[column] = df[column].apply(
+                lambda x: self._mask_string(str(x), visible_chars, mask_char) if pd.notna(x) else x
+            )
         elif technique == AnonymizationTechnique.GENERALIZATION:
             df = self._generalize_column(df, column, params)
 
@@ -319,8 +322,12 @@ class Anonymizer:
         return df
 
     def _mask_string(self, s: str, visible: int, mask_char: str) -> Optional[str]:
-        """Kept for backward compatibility but now returns None as per data integrity rules."""
-        return None
+        """Partial character replacement."""
+        if not s or s == "nan":
+            return s
+        if len(s) <= visible:
+            return s
+        return s[:visible] + (mask_char * (len(s) - visible))
 
     def _generalize_column(
         self,
@@ -521,7 +528,7 @@ class Anonymizer:
                             transformations.append(TransformationDetail(
                                 column_name=col,
                                 technique=AnonymizationTechnique.SUPPRESSION,
-                                params={"reason": f"Supprimé pour atteindre k-anonymat (escalade depuis {upper_col})"},
+                                params={"reason": f"Supprimé par escalade géographique vers {next_level}"},
                                 values_affected=len(df)
                             ))
                             df.drop(columns=[col], inplace=True)
@@ -535,7 +542,7 @@ class Anonymizer:
                             transformations.append(TransformationDetail(
                                 column_name=col,
                                 technique=AnonymizationTechnique.SUPPRESSION,
-                                params={"reason": "Supprimé car fin de hiérarchie atteinte sans k-anonymat"},
+                                params={"reason": "Supprimé pour garantir le k-anonymat (fin de hiérarchie)"},
                                 values_affected=len(df)
                             ))
                             df.drop(columns=[col], inplace=True)
@@ -572,8 +579,10 @@ class Anonymizer:
                 elif upper_col == "GENDER":
                     if not params.get("grouped"):
                         params["grouped"] = True
-                        df[col] = "Person"
-                        changed = True
+                        # Ne pas remplacer par "Person", mais garder tel quel ou masquer légèrement
+                        # Dans beaucoup de cas, le genre est binaire ou restreint, le supprimer si nécessaire
+                        # Mais ici on préfère arrêter l'escalade ou supprimer la colonne si vraiment critique
+                        continue
 
                 # (E) Lat/Lon Escalation (Rounding)
                 elif upper_col in ["LAT", "LON"]:
@@ -634,12 +643,12 @@ class Anonymizer:
         val_str = str(value).lower().strip()
         result = hierarchy.get(val_str) or hierarchy.get(str(value).strip())
         
-        # If no direct match, return a fallback or None
+        # If no direct match, return original value to avoid silent suppression
         if result:
             return result
             
-        # For now, if no match, return None to ensure it can be pruned if fully empty
-        return None
+        # Fallback to original value instead of None
+        return value
 
     def _cleanup_dataset(self, df: pd.DataFrame, transformations: List[TransformationDetail], sparse_threshold: float = 0.95) -> pd.DataFrame:
         """
@@ -698,8 +707,8 @@ class Anonymizer:
             return val_str
             
         elif strategy == "city_to_region":
-            # This ideally needs a mapping, but for now we return None (obscured)
-            return None
+            # Avoid returning None, use prefix if no mapping
+            return self._generalize_text_prefix(val_str, 3)
             
         return self._generalize_text_prefix(val_str, 3)
 
@@ -719,8 +728,9 @@ class Anonymizer:
         # Keep prefix and replace rest with None (effectively invalidating the entry for precise matching)
         # But per requirements, text should remain text. If we can't generalize without mask strings,
         # and we must avoid mask strings, we return None if it's too sensitive.
+        # Keep prefix and replace rest with something indicates it's generalized
         if len(text_str) > prefix_length:
-            return None
+            return text_str[:prefix_length] + "..."
         else:
             # If too short, just return as is
             return text_str
@@ -885,13 +895,14 @@ class Anonymizer:
                 logger.info(f"Quasi-ID '{column_name}' -> NORMALIZATION (Gender)")
 
             elif upper_col == "BIRTHPLACE":
-                # Generalize Birthplace to Country level if possible, else it will be pruned if empty
+                # Avoid empty hierarchy which causes silent pruning
+                # Default to suppression for transparency as birthplace is very identifying
                 config = AnonymizationConfig(
                     column_name=column_name,
-                    technique=AnonymizationTechnique.GENERALIZATION,
-                    params={"hierarchy": {}} # Empty hierarchy will result in None mapping, pruning the column
+                    technique=AnonymizationTechnique.SUPPRESSION,
+                    params={"reason": "Lieu de naissance trop précis pour k-anonymat"}
                 )
-                logger.info(f"Quasi-ID '{column_name}' -> GENERALIZATION (Birthplace preparation)")
+                logger.info(f"Quasi-ID '{column_name}' -> SUPPRESSION (Birthplace)")
 
             elif upper_col == "ZIP":
                 config = AnonymizationConfig(
@@ -926,20 +937,27 @@ class Anonymizer:
                 )
                 logger.info(f"Demographic '{column_name}' -> GENERALIZATION (hierarchy)")
 
-            # Rule 4 & 5: Keep As-Is
-            # GENDER, MARITAL, CITY, STATE, COUNTY, HEALTHCARE_EXPENSES, HEALTHCARE_COVERAGE
-            elif any(keep in upper_col for keep in [
-                "GENDER", "MARITAL", "CITY", "STATE", "COUNTY", 
-                "HEALTHCARE_EXPENSES", "HEALTHCARE_COVERAGE"
-            ]):
-                config = AnonymizationConfig(
-                    column_name=column_name,
-                    technique=AnonymizationTechnique.KEEP_AS_IS,
-                    params={}
-                )
-                logger.info(f"Utility column '{column_name}' -> KEEP AS IS (Technique set)")
+            # Rule 4: Health and Financial - Preference for Differential Privacy if numeric
+            elif any(hp_keyword in upper_col for hp_keyword in ["HEALTHCARE", "EXPENSES", "COVERAGE", "REVENU", "SALAIRE", "MONTANT", "SOLDE"]):
+                if pd.api.types.is_numeric_dtype(df[column_name]):
+                    config = AnonymizationConfig(
+                        column_name=column_name,
+                        technique=AnonymizationTechnique.DIFFERENTIAL_PRIVACY,
+                        params={"epsilon": 1.0, "mechanism": "laplace"}
+                    )
+                else:
+                    config = AnonymizationConfig(
+                        column_name=column_name,
+                        technique=AnonymizationTechnique.GENERALIZATION,
+                        params={"prefix_length": 3}
+                    )
+                logger.info(f"Sensitive Medical/Financial '{column_name}' -> DP/GENERALIZATION")
 
-            # Fallback for other sensitive/quasi columns not covered by specific rules
+            # Fallback for other sensitive/quasi columns: USE DETECTOR SUGGESTIONS
+            elif cls.suggested_config:
+                config = cls.suggested_config
+                logger.info(f"Using suggested config for '{column_name}': {config.technique}")
+            
             elif cls.sensitivity_type in [DataType.DIRECT_IDENTIFIER, DataType.SENSITIVE]:
                 config = AnonymizationConfig(
                     column_name=column_name,

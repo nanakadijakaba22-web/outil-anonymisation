@@ -1,14 +1,12 @@
 {
   "python.defaultInterpreterPath": "/Users/NANAKADIJAKABA/Library/Caches/pypoetry/virtualenvs/annoy-backend-yhqil66o-py3.11/bin/python",
   "python.analysis.extraPaths": [
-    "${workspaceFolder}/backend",
-    "./backend"
-  ],
-  "python.analysis.autoSearchPaths": true,
-  "python.testing.pytestArgs": [
-    "backend/tests"
+    "${workspaceFolder}/backend"
   ],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": [
+    "backend/tests"
+  ],
   "python.analysis.diagnosticMode": "workspace"
 }

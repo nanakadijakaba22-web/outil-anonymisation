@@ -189,72 +189,29 @@ class RiskAssessment(Base):
 
 #### 1. SensitiveDataDetector
 
-**Responsabilité**: Détecter les données sensibles dans un dataset
+**Responsabilité**: Détecter les données sensibles de manière robuste et agnostique au dataset.
 
-**Algorithme**:
-```python
-def analyze_dataset(dataset_id: UUID) -> DetectionReport:
-    # 1. Charger le dataset
-    dataset = load_dataset(dataset_id)
-    df = pd.read_csv(dataset.file_path)
+**Algorithme (Triple-Layer Scoring)**:
+Le moteur utilise un système de pondération à trois niveaux pour classer chaque colonne :
 
-    # 2. Pour chaque colonne
-    for column in df.columns:
-        # 2.1 Analyser le nom de la colonne
-        name_hints = analyze_column_name(column)
+1.  **Niveau 1 : Analyse Sémantique (40%)**
+    - Recherche de racines sémantiques et de mots-clés dans le nom de la colonne (ex: `score`, `medical`, `orient`).
+    - Capture les concepts même avec des noms de colonnes variés (ex: `UserCreditScore`, `CoteCredit`).
 
-        # 2.2 Analyser les valeurs avec patterns regex
-        pattern_matches = match_patterns(df[column])
+2.  **Niveau 2 : Analyse Structurelle (40%)**
+    - Inférence basée sur le contenu réel (RegEx).
+    - Détecte les formats spécifiques : NAS, RAMQ, Emails, IBAN, Dates, Coordonnées GPS.
+    - Analyse les types de données (numérique vs texte) pour confirmer les catégories financières ou de santé.
 
-        # 2.3 Analyser les statistiques
-        stats = calculate_stats(df[column])
+3.  **Niveau 3 : Analyse Statistique (20%)**
+    - Analyse de l'**unicité** (Unique Ratio) : Un ratio proche de 100% sur un échantillon significatif indique un identifiant potentiel.
+    - Analyse de la **cardinalité** : Distingue les catégories fermées (Quasi-identifiants) des identifiants uniques.
 
-        # 2.4 Combiner les résultats
-        classification = classify_column(
-            name_hints,
-            pattern_matches,
-            stats
-        )
+**Calcul de Confiance**:
+Le score final est la somme pondérée des contributions de chaque couche. Si plusieurs couches convergent vers la même classification (ex: Nom="NAS" ET Pattern="NAS"), la confiance atteint son maximum (100%).
 
-        # 2.5 Calculer score de confiance
-        confidence = calculate_confidence(classification)
-
-    # 3. Calculer score de risque global
-    overall_risk = calculate_overall_risk(classifications)
-
-    return DetectionReport(...)
-```
-
-**Patterns regex utilisés**:
-```python
-PATTERNS = {
-    "NAS": r"^\d{3}[-\s]?\d{3}[-\s]?\d{3}$",
-    "EMAIL": r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
-    "TELEPHONE_CA": r"^(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$",
-    "CODE_POSTAL_CA": r"^[A-Z]\d[A-Z]\s?\d[A-Z]\d$",
-    "DATE": r"^\d{4}-\d{2}-\d{2}$",
-    "CARTE_CREDIT": r"^\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}$",
-}
-```
-
-**Classification**:
-```python
-def classify_column(name_hints, patterns, stats):
-    # Identifiants directs (si pattern match fort)
-    if patterns["NAS"] or patterns["EMAIL"]:
-        return "direct_identifier"
-
-    # Quasi-identifiants (combinaison)
-    if patterns["DATE"] and "naissance" in name_hints:
-        return "quasi_identifier"
-
-    # Sensibles (montants d'argent)
-    if stats["is_numeric"] and ("revenu" in name_hints or "solde" in name_hints):
-        return "sensitive"
-
-    # Par défaut
-    return "non_sensitive"
-```
+**Priorité Loi 25**:
+Les catégories explicitement mentionnées par l'article 110 de la Loi 25 (financières, santé, biométriques, vie privée) bénéficient d'une détection prioritaire qui court-circuite le scoring si un match de haute confiance est trouvé.
 
 #### 2. Anonymizer
 

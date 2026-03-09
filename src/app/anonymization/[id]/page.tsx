@@ -33,10 +33,23 @@ function getAutomaticTechnique(sensitivityType: string, columnName: string, cate
       return 'suppression';
 
     case 'quasi_identifier':
+      // Backend automatically suppresses ADDRESS
+      if (lowerName.includes('address') || lowerName.includes('adresse')) {
+        return 'suppression';
+      }
       return 'generalization';
 
     case 'sensitive':
-      if (category === 'financial' || lowerName.includes('revenu') || lowerName.includes('solde') || lowerName.includes('montant')) {
+      // Priority for Differential Privacy on numeric healthcare/financial data
+      if (
+        category === 'financial' ||
+        category === 'health' ||
+        lowerName.includes('revenu') ||
+        lowerName.includes('solde') ||
+        lowerName.includes('montant') ||
+        lowerName.includes('expense') ||
+        lowerName.includes('coverage')
+      ) {
         return 'differential_privacy';
       }
       return 'generalization';

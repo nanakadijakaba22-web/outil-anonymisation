@@ -100,6 +100,7 @@ class SensitiveDataDetector:
         "QUASI": [
             "date_naissance", "birthdate", "dob", "birth_date", "naissance", "born", "birthday", "dateofbirth",
             "age", "age_at", "tranche_age", "annee_naissance", "birth_year",
+            "genre", "gender", "sexe", "sex",
             "profession", "metier", "job", "occupation", "work", "title", "titre", "poste", "position",
             "employeur", "employer", "scolarite", "education", "degree", "diplome",
             "etat_civil", "marital_status", "statut_matrimonial", "mariage", "conjoint", "spouse",
@@ -130,7 +131,6 @@ class SensitiveDataDetector:
             # Origin & Demographics (Sensitive under Law 25)
             "race", "ethnie", "ethnicity", "origine", "origin", "ancestry", "origine_ethnique", "ethnic_origin",
             # Intimate info & Opinions (Law 25)
-            "genre", "gender", "sexe", "sex",
             "opinion", "politique", "political", "parti", "party", "vote", "affiliation", "political_opinion", "parti_politique", "political_affiliation",
             "philosophy", "philosophie", "religion", "croyance", "belief", "faith", "religious_belief",
             "vie_privee", "privacy", "intimacy", "sexual", "sexuel", "sexual_orientation", "orientation_sexuelle",
@@ -144,6 +144,31 @@ class SensitiveDataDetector:
             "categorie_produit", "product_category", "transaction_date", "date_transaction",
             "is_active", "active_member", "membre_actif", "status", "statut", "type", "category", "categorie"
         ]
+    }
+
+    # Loi 25 Priority Categories (Quebec Law 25)
+    LAW25_PRIORITY_CATEGORIES = {
+        "financieres": ["revenu", "income", "salaire", "salary", "wage", "earnings", "remuneration", 
+                        "solde", "balance", "bank", "bancaire", "credit", "debt", "dette", "loan", "hypotheque", "score"],
+        "genetiques_biometriques": ["biometrie", "biometric", "adn", "dna", "genetique", "genetic", 
+                                    "empreinte", "fingerprint", "facial", "faceid", "iris"],
+        "sante": ["sante", "health", "medical", "diagnostic", "maladie", "disease", "treatment", "traitement", 
+                  "medicament", "medication", "drug", "hospital"],
+        "vie_sexuelle_orientation": ["sexual", "orientation", "vie_privee", "privacy", "intimacy"],
+        "convictions_religieuses_philosophiques": ["religion", "croyance", "belief", "faith", "philosophie", "philosophy"],
+        "opinions_politiques": ["politique", "political", "opinion", "vote", "parti", "party", "affiliation"],
+        "origine_ethnique_raciale": ["race", "ethnie", "ethnicity", "ethnic", "origine_ethnique", "ethnic_origin", "ancestry", "origine", "origin"]
+    }
+
+    # Display names for justifications
+    LAW25_DISPLAY_NAMES = {
+        "financieres": "Données financières",
+        "genetiques_biometriques": "Biométrie et génétique",
+        "sante": "Santé",
+        "vie_sexuelle_orientation": "Vie sexuelle et orientation",
+        "convictions_religieuses_philosophiques": "Convictions religieuses et philosophiques",
+        "opinions_politiques": "Opinions politiques",
+        "origine_ethnique_raciale": "Origine ethnique ou raciale"
     }
 
     def __init__(self, db: Session):
@@ -221,87 +246,116 @@ class SensitiveDataDetector:
         data_type: str,
     ) -> ColumnClassification:
         """
-        Detect the sensitivity type of a single column using combined heuristics.
+        Detect the sensitivity type of a single column using a triple-layer weighted scoring system:
+        Level 1: Semantic Analysis (Name/Roots) - 40%
+        Level 2: Structural Analysis (Patterns/Types) - 40%
+        Level 3: Statistical Analysis (Uniqueness/Cardinality) - 20%
         """
         # 0. Normalize column name
         normalized_name = normalize_text(column_name)
         
-        # Track confidence scores for each detection method
-        scores: Dict[DataType, float] = {
+        # 0.1 LAW 25 PRIORITY RULE (ABSOLUTE HIGHEST PRIORITY)
+        law25_match = self._check_law25_priority(normalized_name, sample_values)
+        if law25_match:
+            category, justification = law25_match
+            return ColumnClassification(
+                column_name=column_name,
+                sensitivity_type=DataType.SENSITIVE,
+                category=category,
+                confidence=100.0,
+                justification=justification,
+                suggested_config=self._get_suggested_config(
+                    column_name, DataType.SENSITIVE, category, data_type, None
+                ),
+            )
+
+        # 0.2 Initial Scores
+        layer_scores: Dict[DataType, float] = {
             DataType.DIRECT_IDENTIFIER: 0.0,
             DataType.QUASI_IDENTIFIER: 0.0,
             DataType.SENSITIVE: 0.0,
-            DataType.NON_SENSITIVE: 40.0,  # Baseline
+            DataType.NON_SENSITIVE: 0.0,
         }
-
+        
         category = Category.OTHER
         justification_parts = []
+        pattern_type = None
 
-        # 1. Check column name heuristics (primary)
+        # --- LEVEL 1: SEMANTIC ANALYSIS (Weight: 40%) ---
         name_check = self._check_column_name(normalized_name)
         if name_check:
             sensitivity, cat, score = name_check
-            scores[sensitivity] += score
+            # Scale score to 40 max
+            layer_scores[sensitivity] += (score / 100.0) * 40.0
             category = cat
-            justification_parts.append(f"Nom normalisé '{normalized_name}' correspond à {cat.value}")
+            justification_parts.append(f"Analyse Sémantique : '{normalized_name}' identifié comme {cat.value}")
+        else:
+            layer_scores[DataType.NON_SENSITIVE] += 20.0 # Baseline if name unknown
 
-        # 2. Check pattern matching on values (secondary validation)
+        # --- LEVEL 2: STRUCTURAL ANALYSIS (Weight: 40%) ---
         pattern_check = self._check_patterns(sample_values)
-        pattern_type = pattern_check[0] if pattern_check else None
         if pattern_check:
             p_type, score = pattern_check
-            # Direct IDs patterns
+            pattern_type = p_type
+            contribution = (score / 100.0) * 40.0
+            
             if p_type in ["NAS", "RAMQ", "PASSPORT_CA", "EMAIL", "TELEPHONE_CA", "PERMIS_QC", "SSN_US"]:
-                scores[DataType.DIRECT_IDENTIFIER] += (score * 0.8)
+                layer_scores[DataType.DIRECT_IDENTIFIER] += contribution
                 if category == Category.OTHER:
                     category = Category.HEALTH if p_type == "RAMQ" else Category.PERSONAL
-                justification_parts.append(f"Format {p_type} détecté ({score:.0f}%)")
-                
-            # Financial patterns
             elif p_type in ["CREDIT_CARD", "IBAN"]:
-                scores[DataType.SENSITIVE] += (score * 0.8)
+                layer_scores[DataType.SENSITIVE] += contribution
                 category = Category.FINANCIAL
-                justification_parts.append(f"Format bancaire {p_type} détecté")
-                
-            # Quasi patterns
             elif p_type in ["CODE_POSTAL_CA", "IP_ADDRESS", "MAC_ADDRESS", "DATE", "GPS_COORDS"]:
-                scores[DataType.QUASI_IDENTIFIER] += (score * 0.6)
-                justification_parts.append(f"Motif technique {p_type} détecté")
+                layer_scores[DataType.QUASI_IDENTIFIER] += contribution
+            
+            justification_parts.append(f"Analyse Structurelle : Motif {p_type} détecté ({score:.0f}%)")
+        else:
+            # Data type impact
+            is_numeric = any(t in str(data_type).lower() for t in ["int", "float", "decimal"])
+            if is_numeric and category == Category.FINANCIAL:
+                layer_scores[DataType.SENSITIVE] += 15.0
+            layer_scores[DataType.NON_SENSITIVE] += 10.0
 
-        # 3. Statistical analysis - uniqueness
+        # --- LEVEL 3: STATISTICAL ANALYSIS (Weight: 20%) ---
+        # Uniqueness & Cardinality
         if unique_ratio > 0.98 and len(sample_values) > 10:
-            scores[DataType.DIRECT_IDENTIFIER] += 25
-            justification_parts.append(f"Unicité critique ({unique_ratio:.1%})")
-        elif unique_ratio > 0.8:
-            scores[DataType.QUASI_IDENTIFIER] += 15
+            layer_scores[DataType.DIRECT_IDENTIFIER] += 20.0
+            justification_parts.append(f"Analyse Statistique : Unicité critique ({unique_ratio:.1%})")
+        elif unique_ratio > 0.7:
+            layer_scores[DataType.QUASI_IDENTIFIER] += 15.0
+            justification_parts.append(f"Analyse Statistique : Haute cardinalité")
+        else:
+            layer_scores[DataType.NON_SENSITIVE] += 10.0
 
-        # 4. Data type heuristics
-        is_numeric = "int" in str(data_type).lower() or "float" in str(data_type).lower()
-        if is_numeric:
-            if scores[DataType.SENSITIVE] > 0 or scores[DataType.QUASI_IDENTIFIER] > 0:
-                scores[DataType.SENSITIVE] += 10
-                
-        # Determine final classification
-        final_type = max(scores.keys(), key=lambda k: scores[k])
-        confidence = min(scores[final_type], 100.0)
-        
-        # If confidence is too low, default to NON_SENSITIVE
-        if confidence < 50:
+        # --- FINAL AGGREGATION ---
+        # Base confidence for non-sensitive if nothing else found
+        if all(v == 0 for k, v in layer_scores.items() if k != DataType.NON_SENSITIVE):
             final_type = DataType.NON_SENSITIVE
-            confidence = 50.0
+            confidence = 60.0 # Standard baseline
+        else:
+            final_type = max(layer_scores.keys(), key=lambda k: layer_scores[k])
+            confidence = min(layer_scores[final_type], 100.0)
+            
+            # If multiple layers point to the same thing, boost confidence
+            # (e.g., Name=SENSITIVE and Pattern=SENSITIVE)
+            # This logic is implicitly handled by the additive scoring.
+        
+        # Security Fallback: If it's a direct ID name, it's at least a Direct ID
+        if self._is_direct_identifier_name(normalized_name) and final_type != DataType.DIRECT_IDENTIFIER:
+            if layer_scores[DataType.DIRECT_IDENTIFIER] < 50:
+                final_type = DataType.DIRECT_IDENTIFIER
+                confidence = 90.0
+                justification_parts.append("Sécurité : Nom réservé aux identifiants directs")
 
         return ColumnClassification(
             column_name=column_name,
             sensitivity_type=final_type,
             category=category,
-            confidence=confidence,
-            justification="; ".join(justification_parts) if justification_parts else "Analyse statistique par défaut",
+            confidence=max(confidence, 50.0),
+            justification="; ".join(justification_parts) if justification_parts else "Classification générique par défaut",
             suggested_config=self._get_suggested_config(
-                column_name=column_name,
-                sensitivity_type=final_type,
-                category=category,
-                data_type=data_type,
-                pattern_type=pattern_type
+                column_name, final_type, category, data_type, pattern_type
             ),
         )
 
@@ -339,7 +393,10 @@ class SensitiveDataDetector:
 
         # 2. Sensitive Data (Numeric) -> Differential Privacy
         is_numeric = "int" in str(data_type).lower() or "float" in str(data_type).lower()
-        if sensitivity_type == DataType.SENSITIVE and is_numeric:
+        lower_name = column_name.lower()
+        
+        if (sensitivity_type == DataType.SENSITIVE or 
+            any(k in lower_name for k in ["expense", "coverage", "revenu", "salaire", "montant"])) and is_numeric:
              return AnonymizationConfig(
                 column_name=column_name,
                 technique=AnonymizationTechnique.DIFFERENTIAL_PRIVACY,
@@ -372,6 +429,15 @@ class SensitiveDataDetector:
             )
 
         # Default for text or anything else -> Prefix
+        # Special check for column names like 'city' or 'ville'
+        lower_name = column_name.lower()
+        if "ville" in lower_name or "city" in lower_name or "town" in lower_name or "local" in lower_name:
+             return AnonymizationConfig(
+                column_name=column_name,
+                technique=AnonymizationTechnique.GENERALIZATION,
+                params={"mode": "prefix", "prefix_length": 3}
+            )
+
         return AnonymizationConfig(
             column_name=column_name,
             technique=AnonymizationTechnique.GENERALIZATION,
@@ -396,16 +462,17 @@ class SensitiveDataDetector:
 
         # Check sensitive
         for keyword in self.COLUMN_NAME_KEYWORDS["SENSITIVE"]:
-            if keyword == normalized_name or f"_{keyword}" in normalized_name or f"{keyword}_" in normalized_name:
+            # Generalize matching: check if keyword is a significant part of the column name
+            if keyword in normalized_name:
                 # Sub-categorization
                 cat = Category.OTHER
-                if any(k in normalized_name for k in ["revenu", "income", "salaire", "salary", "account", "compte", "bank", "bancaire", "credit", "debt", "dette", "expense", "depense"]):
+                if any(k in normalized_name for k in ["revenu", "income", "salaire", "salary", "account", "compte", "bank", "bancaire", "credit", "debt", "dette", "expense", "depense", "score"]):
                     cat = Category.FINANCIAL
-                elif any(k in normalized_name for k in ["medical", "health", "sante", "maladie", "disease", "treatment", "traitement", "hospital"]):
+                elif any(k in normalized_name for k in ["medical", "health", "sante", "maladie", "disease", "treatment", "traitement", "hospital", "patient", "clinical"]):
                     cat = Category.HEALTH
                 elif any(k in normalized_name for k in ["biometric", "biometrie", "empreinte", "fingerprint", "dna", "adn", "genetic", "faceid", "iris"]):
                     cat = Category.HEALTH # Biometrics categorized under Health/Personal
-                elif any(k in normalized_name for k in ["religion", "political", "politique", "sexual", "orientation", "gender", "genre", "sexe", "race", "ethni", "origin"]):
+                elif any(k in normalized_name for k in ["religion", "political", "politique", "sexual", "orientation", "gender", "genre", "sexe", "race", "ethni", "origin", "belief", "croyance"]):
                     cat = Category.PERSONAL # Law 25 Sensitive info (Intimate/Demographic)
                 
                 return (DataType.SENSITIVE, cat, 85.0)
@@ -475,3 +542,65 @@ class SensitiveDataDetector:
             return checksum % 10 == 0
         except ValueError:
             return False
+
+    def _check_law25_priority(self, normalized_name: str, sample_values: List[Any]) -> tuple[Category, str] | None:
+        """
+        Check if column belongs to Law 25 priority sensitive categories.
+        
+        Returns (Category, justification) if matched, else None.
+        """
+        # 1. Check column name (normalized)
+        for cat_name, keywords in self.LAW25_PRIORITY_CATEGORIES.items():
+            # Robust matching: check for exact match, underscore prefix/suffix, OR specific combined terms
+            if any(
+                k == normalized_name or 
+                f"_{k}" in normalized_name or 
+                f"{k}_" in normalized_name or
+                (k in ["score", "credit"] and ("score" in normalized_name and "credit" in normalized_name))
+                for k in keywords
+            ):
+                # Map internal cat_name to Category enum
+                category = self._map_law25_to_category(cat_name)
+                display_name = self.LAW25_DISPLAY_NAMES.get(cat_name, cat_name)
+                return (category, f"Classification prioritaire selon la Loi 25 – {display_name}")
+
+        # 2. Check sample values for specific keywords (intimate info/beliefs)
+        str_values = [str(v).lower() for v in sample_values if v is not None]
+        
+        # Check religious keywords
+        religions = ["catholique", "protestant", "musulman", "juif", "bouddhiste", "hindou", "sikh", "athee"]
+        if any(any(r in val for r in religions) for val in str_values):
+            display_name = self.LAW25_DISPLAY_NAMES["convictions_religieuses_philosophiques"]
+            return (Category.PERSONAL, f"Classification prioritaire selon la Loi 25 – {display_name}")
+            
+        # Check sexual orientation
+        orientations = ["heterosexuel", "homosexuel", "bisexuel", "lesbienne", "gay", "queer"]
+        if any(any(o in val for o in orientations) for val in str_values):
+            display_name = self.LAW25_DISPLAY_NAMES["vie_sexuelle_orientation"]
+            return (Category.PERSONAL, f"Classification prioritaire selon la Loi 25 – {display_name}")
+
+        return None
+
+    def _map_law25_to_category(self, cat_name: str) -> Category:
+        """Map Law 25 category name to Category enum."""
+        mapping = {
+            "financieres": Category.FINANCIAL,
+            "genetiques_biometriques": Category.HEALTH,
+            "sante": Category.HEALTH,
+            "vie_sexuelle_orientation": Category.PERSONAL,
+            "convictions_religieuses_philosophiques": Category.PERSONAL,
+            "opinions_politiques": Category.PERSONAL,
+            "origine_ethnique_raciale": Category.PERSONAL
+        }
+        return mapping.get(cat_name, Category.OTHER)
+
+    def _is_direct_identifier_name(self, normalized_name: str) -> bool:
+        """Check if normalized name belongs to Direct Identifiers."""
+        # Simple check against the DIRECT keywords list
+        for keyword in self.COLUMN_NAME_KEYWORDS["DIRECT"]:
+            if keyword == normalized_name or f"_{keyword}" in normalized_name or f"{keyword}_" in normalized_name:
+                # Exclude if it also contains non-sensitive contexts
+                if any(x in normalized_name for x in ["product", "item", "order", "company", "entreprise", "objet", "status", "statut"]):
+                    continue
+                return True
+        return False
