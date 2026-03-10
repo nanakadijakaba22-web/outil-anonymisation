@@ -31,7 +31,7 @@ def test_ethnic_origin_classification():
     print(f"Justification: {classification.justification}")
     
     assert classification.sensitivity_type == DataType.SENSITIVE
-    assert classification.category == Category.PERSONAL
+    assert classification.category == Category.ETHNIC_OR_RACIAL_ORIGIN
     print("Test passed!")
 
 if __name__ == "__main__":

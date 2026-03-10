@@ -9,11 +9,12 @@ This script tests that:
 """
 
 import sys
-import requests
+from fastapi.testclient import TestClient
 from pathlib import Path
+from app.main import app
 
 # Configuration
-BASE_URL = "http://localhost:8000/api/v1"
+client = TestClient(app)
 TEST_CSV_PATH = Path(__file__).parent / "tests" / "fixtures" / "test_data.csv"
 
 def test_preview_endpoint():
@@ -33,7 +34,7 @@ def test_preview_endpoint():
 
     with open(TEST_CSV_PATH, 'rb') as f:
         files = {'file': ('test_data.csv', f, 'text/csv')}
-        response = requests.post(f"{BASE_URL}/datasets/upload", files=files)
+        response = client.post("/api/v1/datasets/upload", files=files)
 
     if response.status_code != 201:
         print(f"❌ Upload failed: {response.status_code}")
@@ -49,7 +50,7 @@ def test_preview_endpoint():
     # Step 2: Get preview
     print("\n[2] Requesting dataset preview (10 rows)...")
 
-    response = requests.get(f"{BASE_URL}/datasets/{dataset_id}/preview?n_rows=10")
+    response = client.get(f"/api/v1/datasets/{dataset_id}/preview?n_rows=10")
 
     if response.status_code != 200:
         print(f"❌ Preview failed: {response.status_code}")
@@ -155,7 +156,7 @@ def test_preview_endpoint():
     # Step 6: Test with different n_rows
     print("\n[6] Testing with n_rows=5...")
 
-    response = requests.get(f"{BASE_URL}/datasets/{dataset_id}/preview?n_rows=5")
+    response = client.get(f"/api/v1/datasets/{dataset_id}/preview?n_rows=5")
 
     if response.status_code != 200:
         print(f"❌ Preview with n_rows=5 failed: {response.status_code}")
@@ -172,7 +173,7 @@ def test_preview_endpoint():
     # Step 7: Test max limit
     print("\n[7] Testing max limit (n_rows=100)...")
 
-    response = requests.get(f"{BASE_URL}/datasets/{dataset_id}/preview?n_rows=100")
+    response = client.get(f"/api/v1/datasets/{dataset_id}/preview?n_rows=100")
 
     if response.status_code != 200:
         print(f"❌ Preview with n_rows=100 failed: {response.status_code}")
@@ -183,7 +184,7 @@ def test_preview_endpoint():
     # Step 8: Test exceeding max limit
     print("\n[8] Testing exceeding max limit (n_rows=101)...")
 
-    response = requests.get(f"{BASE_URL}/datasets/{dataset_id}/preview?n_rows=101")
+    response = client.get(f"/api/v1/datasets/{dataset_id}/preview?n_rows=101")
 
     if response.status_code != 400:
         print(f"❌ Expected 400 Bad Request, got {response.status_code}")
@@ -194,7 +195,7 @@ def test_preview_endpoint():
     # Cleanup: Delete dataset
     print("\n[9] Cleaning up test dataset...")
 
-    response = requests.delete(f"{BASE_URL}/datasets/{dataset_id}")
+    response = client.delete(f"/api/v1/datasets/{dataset_id}")
 
     if response.status_code != 204:
         print(f"⚠️  Warning: Failed to delete dataset (status {response.status_code})")

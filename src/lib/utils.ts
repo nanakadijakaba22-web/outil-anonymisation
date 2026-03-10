@@ -97,15 +97,25 @@ export function formatSensitivityType(type: string | null): string {
   }
 }
 
-// Format category to French
+// Format category to French according to Law 25
 export function formatCategory(category: string | null): string {
   switch (category) {
-    case 'personal':
-      return 'Personnel';
     case 'financial':
       return 'Financier';
+    case 'genetic_or_biometric':
+      return 'Génétique ou biométrique';
     case 'health':
       return 'Santé';
+    case 'sexual_life_or_orientation':
+      return 'Vie sexuelle ou orientation sexuelle';
+    case 'religious_or_philosophical_beliefs':
+      return 'Convictions religieuses ou philosophiques';
+    case 'political_opinions':
+      return 'Opinions politiques';
+    case 'ethnic_or_racial_origin':
+      return 'Origine ethnique ou raciale';
+    case 'personal':
+      return 'Personnel';
     case 'insurance':
       return 'Assurance';
     case 'other':

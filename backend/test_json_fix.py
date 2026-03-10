@@ -2,7 +2,7 @@ import json
 import numpy as np
 import uuid
 from datetime import datetime
-from backend.app.models.database import json_dumps
+from app.models.database import json_dumps
 
 def test_json_serialization():
     data = {

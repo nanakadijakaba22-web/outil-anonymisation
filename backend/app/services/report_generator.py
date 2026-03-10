@@ -411,7 +411,7 @@ class PDFReportGenerator:
                         self._format_sensitivity_type(
                             classification.sensitivity_type
                         ),
-                        classification.category,
+                        self._format_category(classification.category),
                         f"{classification.confidence:.0f}%",
                     ]
                 )
@@ -529,10 +529,29 @@ class PDFReportGenerator:
         mapping = {
             "direct_identifier": "Identifiant direct",
             "quasi_identifier": "Quasi-identifiant",
-            "sensitive": "Sensible",
+            "sensitive": "Renseignement sensible",
             "non_sensitive": "Non-sensible",
         }
         return mapping.get(sensitivity_type, sensitivity_type)
+
+    def _format_category(self, category: str) -> str:
+        """Format category for display according to Law 25."""
+        if not category:
+            return ""
+            
+        mapping = {
+            "financial": "financier",
+            "genetic_or_biometric": "génétique ou biométrique",
+            "health": "santé",
+            "sexual_life_or_orientation": "vie sexuelle ou orientation sexuelle",
+            "religious_or_philosophical_beliefs": "convictions religieuses ou philosophiques",
+            "political_opinions": "opinions politiques",
+            "ethnic_or_racial_origin": "origine ethnique ou raciale",
+            "personal": "personnel",
+            "insurance": "assurance",
+            "other": "autre"
+        }
+        return mapping.get(category, category)
 
     def _format_technique(self, technique: str) -> str:
         """Format anonymization technique for display."""

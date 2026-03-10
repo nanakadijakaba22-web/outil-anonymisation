@@ -35,12 +35,22 @@ L'outil utilise une bibliothèque de **Regex spécialisées** pour le contexte q
 
 ### 2.2 Analyse Heuristique des Noms de Colonnes
 Annoy utilise un dictionnaire de mots-clés normalisés (minuscules, sans accents) en français et anglais pour classer les colonnes en quatre catégories :
-#### Justification des Pondérations de Classification
+#### Catégories de Données Sensibles (Loi 25)
+L'outil identifie précisément les 7 catégories de renseignements personnels sensibles définies par la Loi 25 du Québec :
+
+1. **Financier** (`financial`) : Informations bancaires, revenus, transactions.
+2. **Génétique ou biométrique** (`genetic_or_biometric`) : Empreintes, ADN, scans rétiniens.
+3. **Santé** (`health`) : Diagnostics, dossiers médicaux, traitements.
+4. **Vie sexuelle ou orientation sexuelle** (`sexual_life_or_orientation`) : Préférences et identité.
+5. **Convictions religieuses ou philosophiques** (`religious_or_philosophical_beliefs`) : Appartenance religieuse, écoles de pensée.
+6. **Opinions politiques** (`political_opinions`) : Appartenance à des partis, votes, engagements.
+7. **Origine ethnique ou raciale** (`ethnic_or_racial_origin`) : Ascendance, groupes culturels.
+
 | Catégorie | Poids | Impact (NIST) | Justification Technique | Source |
 | :--- | :--- | :--- | :--- | :--- |
 | **Identifiants Directs** | **40** | Critique | Identification immédiate (probabilité 1.0). | Sweeney (2002) |
 | **Quasi-identifiants** | **25** | Élevé | Requièrent une liaison externe (*Linkability*). | Cavoukian (2009) |
-| **Données Sensibles** | **20** | Modéré | Risque de préjudice sans identification directe. | G29 (2014) |
+| **Données Sensibles** | **20** | Modéré | Risque de préjudice sans identification directe (Loi 25). | G29 (2014) |
 | **Données Non-Sensibles** | **0** | Négligeable | Aucun impact sur la vie privée. | Standard |
 
 - **Fondement Théorique** : Cette classification s'appuie sur les travaux de **Sweeney (2002)**. Les identifiants directs permettent une ré-identification immédiate, tandis que les quasi-identifiants (ex: code postal, date de naissance) peuvent être combinés pour désanonymiser un individu.

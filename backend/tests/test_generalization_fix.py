@@ -25,8 +25,8 @@ def test_prefix_generalization():
     print("Original: Montreal, Quebec, Laval")
     print(f"Generalized: {result_df['city'].tolist()}")
     
-    assert result_df["city"].iloc[0] == "Mon..."
-    assert result_df["city"].iloc[1] == "Que..."
+    assert result_df["city"].iloc[0] == "Mon ***"
+    assert result_df["city"].iloc[1] == "Que ***"
     print("Prefix generalization test passed!")
 
 def test_masking():

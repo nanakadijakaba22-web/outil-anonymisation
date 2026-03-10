@@ -142,33 +142,42 @@ class SensitiveDataDetector:
         "NON_SENSITIVE": [
             "transaction_count", "nombre_produits", "num_products", "order_status", "statut_commande",
             "categorie_produit", "product_category", "transaction_date", "date_transaction",
-            "is_active", "active_member", "membre_actif", "status", "statut", "type", "category", "categorie"
+            "is_active", "active_member", "membre_actif", "status", "statut", "type", "category", "categorie",
+            "item_id", "product_id"
+        ],
+
+        # Intrinsically Sensitive Domains (Always SENSITIVE)
+        "INTRINSIC_SENSITIVE": [
+            "credit_score", "score_credit", "income", "revenu", "salary", "salaire", "wage", "earnings",
+            "loan", "dette", "debt", "balance", "solde", "amount", "montant", "expense", "depense",
+            "medical", "health", "sante", "insurance", "assurance", "coverage", "premium", "prime",
+            "religion", "belief", "croyance", "political", "politique", "sexual", "orientation",
+            "biometric", "biometrie", "biométrie", "facial", "face_id", "faceid", "fingerprint", "empreinte", "iris", "reconnaissance", "dna", "adn", "genetic", "genetique"
         ]
     }
 
-    # Loi 25 Priority Categories (Quebec Law 25)
+    # Loi 25 Priority Categories (Quebec Law 25 - Official Article 110 & Definitions)
+    # These 7 categories are explicitly defined as sensitive information by Law 25.
+    # Order matters for priority within detection logic.
     LAW25_PRIORITY_CATEGORIES = {
-        "financieres": ["revenu", "income", "salaire", "salary", "wage", "earnings", "remuneration", 
-                        "solde", "balance", "bank", "bancaire", "credit", "debt", "dette", "loan", "hypotheque", "score"],
-        "genetiques_biometriques": ["biometrie", "biometric", "adn", "dna", "genetique", "genetic", 
-                                    "empreinte", "fingerprint", "facial", "faceid", "iris"],
-        "sante": ["sante", "health", "medical", "diagnostic", "maladie", "disease", "treatment", "traitement", 
-                  "medicament", "medication", "drug", "hospital"],
-        "vie_sexuelle_orientation": ["sexual", "orientation", "vie_privee", "privacy", "intimacy"],
-        "convictions_religieuses_philosophiques": ["religion", "croyance", "belief", "faith", "philosophie", "philosophy"],
-        "opinions_politiques": ["politique", "political", "opinion", "vote", "parti", "party", "affiliation"],
-        "origine_ethnique_raciale": ["race", "ethnie", "ethnicity", "ethnic", "origine_ethnique", "ethnic_origin", "ancestry", "origine", "origin"]
+        "health": ["medical", "health", "sante", "patient", "diagnosis", "disease", "clinical", "traitement", "diagnostic", "cost", "expense", "record", "medic", "diagnost", "clinical", "sant"],
+        "genetic_or_biometric": ["biometrie", "biometric", "biométrie", "facial", "face_id", "faceid", "fingerprint", "empreinte", "iris", "reconnaissance", "adn", "dna", "genetique", "genetic", "face", "reconnaissanc"],
+        "financial": ["credit", "score", "salary", "income", "loan", "balance", "account", "payment", "debt", "salaire", "revenu", "solde", "compte", "finan", "salair", "dette"],
+        "sexual_life_or_orientation": ["sexual", "orientation", "vie_privee", "privacy", "intimacy", "sexuel", "orientat", "priv", "intima", "lgbt", "gay", "lesbien", "hetero", "bi"],
+        "religious_or_philosophical_beliefs": ["religion", "croyance", "belief", "faith", "philosophie", "philosophy", "relig", "philosoph", "conviction", "belief", "spiritual", "athe"],
+        "political_opinions": ["politique", "political", "opinion", "vote", "parti", "party", "affiliation", "polit", "affiliat", "militant", "syndicat"],
+        "ethnic_or_racial_origin": ["race", "ethnie", "ethnicity", "ethnic", "origine_ethnique", "ethnic_origin", "ancestry", "origine", "origin", "ethni", "ancestr", "racial"]
     }
 
-    # Display names for justifications
+    # Display names for justifications (French labels as requested for Law 25 compliance)
     LAW25_DISPLAY_NAMES = {
-        "financieres": "Données financières",
-        "genetiques_biometriques": "Biométrie et génétique",
-        "sante": "Santé",
-        "vie_sexuelle_orientation": "Vie sexuelle et orientation",
-        "convictions_religieuses_philosophiques": "Convictions religieuses et philosophiques",
-        "opinions_politiques": "Opinions politiques",
-        "origine_ethnique_raciale": "Origine ethnique ou raciale"
+        "financial": "financier",
+        "genetic_or_biometric": "génétique ou biométrique",
+        "health": "santé",
+        "sexual_life_or_orientation": "vie sexuelle ou orientation sexuelle",
+        "religious_or_philosophical_beliefs": "convictions religieuses ou philosophiques",
+        "political_opinions": "opinions politiques",
+        "ethnic_or_racial_origin": "origine ethnique ou raciale"
     }
 
     def __init__(self, db: Session):
@@ -254,7 +263,21 @@ class SensitiveDataDetector:
         # 0. Normalize column name
         normalized_name = normalize_text(column_name)
         
-        # 0.1 LAW 25 PRIORITY RULE (ABSOLUTE HIGHEST PRIORITY)
+        # 0.1 DIRECT IDENTIFIER PRIORITY (HIGHEST)
+        # Check by name first
+        if self._is_direct_identifier_name(normalized_name):
+             return ColumnClassification(
+                column_name=column_name,
+                sensitivity_type=DataType.DIRECT_IDENTIFIER,
+                category=Category.PERSONAL,
+                confidence=95.0,
+                justification=f"Identifiant direct : Reconnu par son nom de colonne '{column_name}'",
+                suggested_config=self._get_suggested_config(
+                    column_name, DataType.DIRECT_IDENTIFIER, Category.PERSONAL, data_type, None
+                ),
+            )
+
+        # 0.2 LAW 25 PRIORITY RULE (ABSOLUTE PRIORITY FOR SENSITIVE DOMAINS)
         law25_match = self._check_law25_priority(normalized_name, sample_values)
         if law25_match:
             category, justification = law25_match
@@ -288,7 +311,8 @@ class SensitiveDataDetector:
             # Scale score to 40 max
             layer_scores[sensitivity] += (score / 100.0) * 40.0
             category = cat
-            justification_parts.append(f"Analyse Sémantique : '{normalized_name}' identifié comme {cat.value}")
+            display_name = self.LAW25_DISPLAY_NAMES.get(cat.value, cat.value)
+            justification_parts.append(f"Analyse Sémantique : '{normalized_name}' identifié comme {display_name}")
         else:
             layer_scores[DataType.NON_SENSITIVE] += 20.0 # Baseline if name unknown
 
@@ -336,24 +360,33 @@ class SensitiveDataDetector:
         else:
             final_type = max(layer_scores.keys(), key=lambda k: layer_scores[k])
             confidence = min(layer_scores[final_type], 100.0)
+
+        # 1. FINAL JUSTIFICATION ASSEMBLY
+        final_justification = "; ".join(justification_parts) if justification_parts else "Classification par défaut"
+
+        # 2. SECURITY & NATURE OVERLAYS
+        if final_type == DataType.DIRECT_IDENTIFIER:
+             final_justification = f"Identifiant direct : {final_justification}"
+        else:
+            is_intrinsically_sensitive = any(keyword in normalized_name for keyword in self.COLUMN_NAME_KEYWORDS["INTRINSIC_SENSITIVE"])
+            if is_intrinsically_sensitive and final_type != DataType.SENSITIVE:
+                final_type = DataType.SENSITIVE
+                confidence = max(confidence, 85.0)
+                justification_parts.insert(0, "Nature : Donnée intrinsèquement sensible (Loi 25)")
+                final_justification = "; ".join(justification_parts)
             
-            # If multiple layers point to the same thing, boost confidence
-            # (e.g., Name=SENSITIVE and Pattern=SENSITIVE)
-            # This logic is implicitly handled by the additive scoring.
-        
-        # Security Fallback: If it's a direct ID name, it's at least a Direct ID
-        if self._is_direct_identifier_name(normalized_name) and final_type != DataType.DIRECT_IDENTIFIER:
-            if layer_scores[DataType.DIRECT_IDENTIFIER] < 50:
-                final_type = DataType.DIRECT_IDENTIFIER
-                confidence = 90.0
-                justification_parts.append("Sécurité : Nom réservé aux identifiants directs")
+            # Clarify for SENSITIVE/QUASI data
+            if final_type == DataType.SENSITIVE:
+                 final_justification = f"Sensible par nature (non directement identifiant) : {final_justification}"
+            elif final_type == DataType.QUASI_IDENTIFIER:
+                 final_justification = f"Quasi-identifiant (risque de ré-identification par combinaison) : {final_justification}"
 
         return ColumnClassification(
             column_name=column_name,
             sensitivity_type=final_type,
             category=category,
             confidence=max(confidence, 50.0),
-            justification="; ".join(justification_parts) if justification_parts else "Classification générique par défaut",
+            justification=final_justification,
             suggested_config=self._get_suggested_config(
                 column_name, final_type, category, data_type, pattern_type
             ),
@@ -464,16 +497,18 @@ class SensitiveDataDetector:
         for keyword in self.COLUMN_NAME_KEYWORDS["SENSITIVE"]:
             # Generalize matching: check if keyword is a significant part of the column name
             if keyword in normalized_name:
-                # Sub-categorization
+                # Sub-categorization with Priority: HEALTH > FINANCIAL > INSURANCE > PERSONAL
                 cat = Category.OTHER
-                if any(k in normalized_name for k in ["revenu", "income", "salaire", "salary", "account", "compte", "bank", "bancaire", "credit", "debt", "dette", "expense", "depense", "score"]):
-                    cat = Category.FINANCIAL
-                elif any(k in normalized_name for k in ["medical", "health", "sante", "maladie", "disease", "treatment", "traitement", "hospital", "patient", "clinical"]):
+                if any(k in normalized_name for k in ["medical", "health", "sante", "patient", "diagnosis", "disease", "clinical"]):
                     cat = Category.HEALTH
+                elif any(k in normalized_name for k in ["credit", "score", "salary", "income", "loan", "balance", "account", "payment", "debt"]):
+                    cat = Category.FINANCIAL
+                elif any(k in normalized_name for k in ["assurance", "insurance", "policy", "police", "claim", "coverage", "premium", "prime"]):
+                    cat = Category.INSURANCE
                 elif any(k in normalized_name for k in ["biometric", "biometrie", "empreinte", "fingerprint", "dna", "adn", "genetic", "faceid", "iris"]):
-                    cat = Category.HEALTH # Biometrics categorized under Health/Personal
+                    cat = Category.HEALTH
                 elif any(k in normalized_name for k in ["religion", "political", "politique", "sexual", "orientation", "gender", "genre", "sexe", "race", "ethni", "origin", "belief", "croyance"]):
-                    cat = Category.PERSONAL # Law 25 Sensitive info (Intimate/Demographic)
+                    cat = Category.PERSONAL
                 
                 return (DataType.SENSITIVE, cat, 85.0)
 
@@ -556,13 +591,14 @@ class SensitiveDataDetector:
                 k == normalized_name or 
                 f"_{k}" in normalized_name or 
                 f"{k}_" in normalized_name or
+                (k in normalized_name and len(k) > 4) or # Substring match for longer keywords
                 (k in ["score", "credit"] and ("score" in normalized_name and "credit" in normalized_name))
                 for k in keywords
             ):
                 # Map internal cat_name to Category enum
                 category = self._map_law25_to_category(cat_name)
                 display_name = self.LAW25_DISPLAY_NAMES.get(cat_name, cat_name)
-                return (category, f"Classification prioritaire selon la Loi 25 – {display_name}")
+                return (category, f"Catégorie sensible selon la Loi 25 : {display_name}")
 
         # 2. Check sample values for specific keywords (intimate info/beliefs)
         str_values = [str(v).lower() for v in sample_values if v is not None]
@@ -570,27 +606,29 @@ class SensitiveDataDetector:
         # Check religious keywords
         religions = ["catholique", "protestant", "musulman", "juif", "bouddhiste", "hindou", "sikh", "athee"]
         if any(any(r in val for r in religions) for val in str_values):
-            display_name = self.LAW25_DISPLAY_NAMES["convictions_religieuses_philosophiques"]
-            return (Category.PERSONAL, f"Classification prioritaire selon la Loi 25 – {display_name}")
-            
-        # Check sexual orientation
-        orientations = ["heterosexuel", "homosexuel", "bisexuel", "lesbienne", "gay", "queer"]
+            display_name = self.LAW25_DISPLAY_NAMES["religious_or_philosophical_beliefs"]
+            return (Category.RELIGIOUS_OR_PHILOSOPHICAL_BELIEFS, f"Donnée sensible (Loi 25 - convictions religieuses) : {display_name}")
+    
+        # Check sexual orientation keywords
+        orientations = ["homosexuel", "heterosexuel", "bisexuel", "lesbienne", "gay", "transgenre"]
         if any(any(o in val for o in orientations) for val in str_values):
-            display_name = self.LAW25_DISPLAY_NAMES["vie_sexuelle_orientation"]
-            return (Category.PERSONAL, f"Classification prioritaire selon la Loi 25 – {display_name}")
+            display_name = self.LAW25_DISPLAY_NAMES["sexual_life_or_orientation"]
+            return (Category.SEXUAL_LIFE_OR_ORIENTATION, f"Donnée sensible (Loi 25 - vie privée) : {display_name}")
 
         return None
 
     def _map_law25_to_category(self, cat_name: str) -> Category:
         """Map Law 25 category name to Category enum."""
         mapping = {
-            "financieres": Category.FINANCIAL,
-            "genetiques_biometriques": Category.HEALTH,
-            "sante": Category.HEALTH,
-            "vie_sexuelle_orientation": Category.PERSONAL,
-            "convictions_religieuses_philosophiques": Category.PERSONAL,
-            "opinions_politiques": Category.PERSONAL,
-            "origine_ethnique_raciale": Category.PERSONAL
+            "financial": Category.FINANCIAL,
+            "genetic_or_biometric": Category.GENETIC_OR_BIOMETRIC,
+            "health": Category.HEALTH,
+            "sexual_life_or_orientation": Category.SEXUAL_LIFE_OR_ORIENTATION,
+            "religious_or_philosophical_beliefs": Category.RELIGIOUS_OR_PHILOSOPHICAL_BELIEFS,
+            "political_opinions": Category.POLITICAL_OPINIONS,
+            "ethnic_or_racial_origin": Category.ETHNIC_OR_RACIAL_ORIGIN,
+            "insurance": Category.INSURANCE,
+            "personal": Category.PERSONAL
         }
         return mapping.get(cat_name, Category.OTHER)
 

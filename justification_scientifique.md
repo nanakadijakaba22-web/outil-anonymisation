@@ -46,7 +46,21 @@ La **Loi 25 (Québec)**, via son **Règlement sur l'anonymisation** (entré en v
 
 ---
 
-## 4. Stratégies de Transformations Avancées
+## 4. Catégories de Données Sensibles (Loi 25)
+
+L'outil segmente les données sensibles en **7 catégories officielles** conformes au Règlement sur l'anonymisation de la Loi 25 (Québec) :
+
+1. **Financier** (`financial`) : Données bancaires, états financiers, revenus.
+2. **Génétique ou biométrique** (`genetic_or_biometric`) : Profils ADN, reconnaissance faciale, empreintes.
+3. **Santé** (`health`) : Historique médical, prescriptions, assureurs santé.
+4. **Vie sexuelle ou orientation sexuelle** (`sexual_life_or_orientation`) : Orientation, identité de genre.
+5. **Convictions religieuses ou philosophiques** (`religious_or_philosophical_beliefs`) : Appartenance religieuse, croyances.
+6. **Opinions politiques** (`political_opinions`) : Votes, adhésion à des partis, opinions publiques.
+7. **Origine ethnique ou raciale** (`ethnic_or_racial_origin`) : Ethnie, race, origine géoculturelle.
+
+Chaque détection dans ces catégories entraîne un marquage automatique comme **"Sensible"** avec un score de confiance élevé.
+
+## 5. Stratégies de Transformations Avancées
 
 ## 4. Stratégies de Transformations Avancées
 

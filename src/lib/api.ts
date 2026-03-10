@@ -42,11 +42,21 @@ export interface DatasetPreview {
 export interface ColumnClassification {
   column_name: string;
   sensitivity_type:
-    | "direct_identifier"
-    | "quasi_identifier"
-    | "sensitive"
-    | "non_sensitive";
-  category: "personal" | "financial" | "health" | "insurance" | "other";
+  | "direct_identifier"
+  | "quasi_identifier"
+  | "sensitive"
+  | "non_sensitive";
+  category:
+  | "financial"
+  | "genetic_or_biometric"
+  | "health"
+  | "sexual_life_or_orientation"
+  | "religious_or_philosophical_beliefs"
+  | "political_opinions"
+  | "ethnic_or_racial_origin"
+  | "personal"
+  | "insurance"
+  | "other";
   confidence: number;
   justification: string;
   risk_score?: number; // Optionnel - Risque de ré-identification (0-100)
@@ -67,11 +77,21 @@ export interface DetectionReport {
 
 export interface ColumnSensitivityUpdate {
   sensitivity_type:
-    | "direct_identifier"
-    | "quasi_identifier"
-    | "sensitive"
-    | "non_sensitive";
-  category?: "personal" | "financial" | "health" | "insurance" | "other";
+  | "direct_identifier"
+  | "quasi_identifier"
+  | "sensitive"
+  | "non_sensitive";
+  category?:
+  | "financial"
+  | "genetic_or_biometric"
+  | "health"
+  | "sexual_life_or_orientation"
+  | "religious_or_philosophical_beliefs"
+  | "political_opinions"
+  | "ethnic_or_racial_origin"
+  | "personal"
+  | "insurance"
+  | "other";
   justification?: string;
 }
 
@@ -82,10 +102,10 @@ export interface BulkSensitivityUpdate {
 export interface AnonymizationConfig {
   column_name: string;
   technique:
-    | "masking"
-    | "generalization"
-    | "suppression"
-    | "differential_privacy";
+  | "masking"
+  | "generalization"
+  | "suppression"
+  | "differential_privacy";
   params: Record<string, any>;
 }
 

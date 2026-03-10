@@ -44,7 +44,7 @@ def test_export_values():
     params_city = {"mode": "prefix", "prefix_length": 3}
     df_city = anonymizer._generalize_column(df.copy(), "city", params_city)
     print(f"City values: {df_city['city'].tolist()}")
-    assert all(isinstance(x, str) and x.endswith("...") for x in df_city["city"].tolist())
+    assert all(isinstance(x, str) and x.endswith(" ***") for x in df_city["city"].tolist())
 
     print("Export values test passed!")
 

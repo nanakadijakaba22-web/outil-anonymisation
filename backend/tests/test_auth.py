@@ -7,12 +7,18 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.core.database import Base, get_db
+from app.core.database import Base
+from app.core.dependencies import get_db
 from app.main import app
 from app.services.auth import AuthService
 
+@pytest.fixture(autouse=True)
+def setup_database():
+    """Rely on session-wide database setup. Only ensure tables are created if needed."""
+    Base.metadata.create_all(bind=engine)
+    yield
 
-# Test database setup
+# Test database setup locally for this module
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 engine = create_engine(
@@ -22,7 +28,6 @@ engine = create_engine(
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-
 def override_get_db():
     """Override database dependency for testing."""
     try:
@@ -31,22 +36,8 @@ def override_get_db():
     finally:
         db.close()
 
-
 app.dependency_overrides[get_db] = override_get_db
-
 client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def setup_database():
-    """Create tables before each test and drop after."""
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
-
-    # Close all connections
-    engine.dispose()
 
 
 class TestAuthService:

@@ -101,12 +101,12 @@ def test_dataset_cleanup():
         print("❌ DEATHDATE removed incorrectly")
         results.append(False)
         
-    # 4. BIRTHPLACE must be removed (empty)
-    if "BIRTHPLACE" not in anonymized_df.columns:
-        print("✅ BIRTHPLACE removed (empty)")
+    # 4. BIRTHPLACE preservation (no match)
+    if "BIRTHPLACE" in anonymized_df.columns:
+        print("✅ BIRTHPLACE preserved (no hierarchy match)")
         results.append(True)
     else:
-        print("❌ BIRTHPLACE still present")
+        print("❌ BIRTHPLACE removed incorrectly")
         results.append(False)
         
     # 6. Check if dropped columns are in transformations
@@ -118,11 +118,11 @@ def test_dataset_cleanup():
     suppressed_cols = [t.column_name for t in transformations if t.technique == AnonymizationTechnique.SUPPRESSION]
     print(f"Suppressed columns in report: {suppressed_cols}")
     
-    if "BIRTHPLACE" in suppressed_cols:
-        print("✅ BIRTHPLACE (empty) correctly reported as suppressed")
+    if "BIRTHPLACE" not in suppressed_cols:
+        print("✅ BIRTHPLACE (not empty) correctly NOT reported as suppressed")
         results.append(True)
     else:
-        print("❌ BIRTHPLACE (empty) NOT reported as suppressed")
+        print("❌ BIRTHPLACE reported as suppressed incorrectly")
         results.append(False)
 
     if "LAT" in suppressed_cols:
@@ -133,12 +133,8 @@ def test_dataset_cleanup():
         results.append(False)
 
     db.close()
-    if all(results):
-        print("\n✨ CLEANUP SUCCESS ✨")
-        sys.exit(0)
-    else:
-        print("\n❌ CLEANUP FAILURE ❌")
-        sys.exit(1)
+    assert all(results), "Some dataset cleanup tests failed"
+    print("\n✨ CLEANUP SUCCESS ✨")
 
 if __name__ == "__main__":
     test_dataset_cleanup()

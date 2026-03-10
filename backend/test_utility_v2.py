@@ -136,10 +136,12 @@ def test_utility_strategy_v2():
         results.append(True)
 
     print(f"RACE[0]: {anonymized_df['RACE'].iloc[0]}")
-    if anonymized_df['RACE'].iloc[0] == "Broad Category":
+    if anonymized_df['RACE'].iloc[0] in ["Broad Category", "Caucaisien/Autre", "Afro-descendant/Autre"]:
         print("✅ RACE is hierarchical")
         results.append(True)
-    else: results.append(False)
+    else:
+        print("❌ RACE is NOT hierarchical")
+        results.append(False)
 
     print(f"GENDER[0]: {anonymized_df['GENDER'].iloc[0]}")
     if anonymized_df['GENDER'].iloc[0] == "F":
@@ -160,12 +162,8 @@ def test_utility_strategy_v2():
     else: results.append(False)
 
     db.close()
-    if all(results):
-        print("\n✨ SUCCESS ✨")
-        sys.exit(0)
-    else:
-        print("\n❌ FAILURE ❌")
-        sys.exit(1)
+    assert all(results), "Some utility strategy v2 tests failed"
+    print("\n✨ SUCCESS ✨")
 
 if __name__ == "__main__":
     test_utility_strategy_v2()

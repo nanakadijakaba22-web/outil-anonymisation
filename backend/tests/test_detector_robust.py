@@ -48,12 +48,12 @@ class TestSensitiveDataDetector(unittest.TestCase):
             ("annual_income", DataType.SENSITIVE, Category.FINANCIAL),
             ("diagnostic_médical", DataType.SENSITIVE, Category.HEALTH),
             ("medical_history", DataType.SENSITIVE, Category.HEALTH),
-            ("opinion_politique", DataType.SENSITIVE, Category.PERSONAL),
-            ("political_affiliation", DataType.SENSITIVE, Category.PERSONAL),
-            ("religion", DataType.SENSITIVE, Category.PERSONAL),
-            ("ethnicity", DataType.SENSITIVE, Category.PERSONAL),
-            ("race", DataType.SENSITIVE, Category.PERSONAL),
-            ("healthcare_expenses", DataType.SENSITIVE, Category.FINANCIAL),
+            ("opinion_politique", DataType.SENSITIVE, Category.POLITICAL_OPINIONS),
+            ("political_affiliation", DataType.SENSITIVE, Category.POLITICAL_OPINIONS),
+            ("religion", DataType.SENSITIVE, Category.RELIGIOUS_OR_PHILOSOPHICAL_BELIEFS),
+            ("ethnicity", DataType.SENSITIVE, Category.ETHNIC_OR_RACIAL_ORIGIN),
+            ("race", DataType.SENSITIVE, Category.ETHNIC_OR_RACIAL_ORIGIN),
+            ("healthcare_expenses", DataType.SENSITIVE, Category.HEALTH),
         ]
         for name, expected_type, expected_cat in test_cases:
             with self.subTest(name=name):
