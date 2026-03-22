@@ -597,7 +597,7 @@ POSTGRES_DB=annoy_db
 POSTGRES_PORT=5432
 
 # API
-API_V1_STR=/api/v1
+URL_STR=/api/v1
 PROJECT_NAME=Annoy - Data Anonymization Tool
 BACKEND_CORS_ORIGINS=http://localhost:3000
 

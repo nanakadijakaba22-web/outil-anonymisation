@@ -59,6 +59,9 @@ class SensitiveDataDetector:
         # Date formats: YYYY-MM-DD, DD/MM/YYYY, etc.
         "DATE": r"^\d{4}[-/]\d{2}[-/]\d{2}$|^\d{2}[-/]\d{2}[-/]\d{4}$|^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$",
 
+        # Name pattern: Alphabetic with possible spaces/hyphens (e.g., Jean-Marie, O'Connor)
+        "NAME": r"^[a-zàâçéèêëîïôûùÿñæœ]+(?:[-'\s][a-zàâçéèêëîïôûùÿñæœ]+)*$",
+
         # Credit Card (General)
         "CREDIT_CARD": r"^\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}$",
 
@@ -82,15 +85,17 @@ class SensitiveDataDetector:
     # Normalized versions only (no accents, lowercase, snake_case)
     COLUMN_NAME_KEYWORDS = {
         # Direct identifiers - Unique person identifier
+        # Direct identifiers - Unique person identifier
         "DIRECT": [
             "nom", "name", "surname", "lastname", "family_name", "last_name", "full_name", "nom_complet",
-            "prenom", "firstname", "given_name", "first_name", "middle_name", "fullname",
+            "prenom", "firstname", "given_name", "first_name", "middle_name", "fullname", "first", "last",
             "email", "courriel", "e_mail", "mail", "adresse_electronique",
             "telephone", "phone", "tel", "mobile", "cellulaire", "cell", "fax", "numero_telephone", "phone_number",
             "nas", "sin", "social_insurance", "assurance_sociale", "ssn", "social_security", "socialsecuritynumber",
             "ramq", "assurance_maladie", "health_insurance",
             "passport", "passeport", "no_passport", "passport_number", "numero_passeport",
-            "permis", "license", "licence", "drivers_license", "permis_conduire",
+            "permis", "license", "licence", "drivers_license", "permis_conduire", "drivers",
+            "maiden", "nom_jeune_fille",
             "id_client", "client_id", "customer_id", "user_id", "userid", "uid", "sid", "clientid", "customerid",
             "identifiant", "identifier", "numero_client", "customer_number",
             "account_id", "compte_id", "user_name", "username", "login", "pseudo", "nickname", "alias",
@@ -100,28 +105,24 @@ class SensitiveDataDetector:
         "QUASI": [
             "date_naissance", "birthdate", "dob", "birth_date", "naissance", "born", "birthday", "dateofbirth",
             "age", "age_at", "tranche_age", "annee_naissance", "birth_year",
-            "genre", "gender", "sexe", "sex",
             "profession", "metier", "job", "occupation", "work", "title", "titre", "poste", "position",
             "employeur", "employer", "scolarite", "education", "degree", "diplome",
-            "etat_civil", "marital_status", "statut_matrimonial", "mariage", "conjoint", "spouse",
             "postal", "zip", "code_postal", "zip_code", "postal_code", "pcode", "zipcode", "codepostal",
             "adresse", "address", "rue", "street", "civique", "apt", "suite", "local", "bureau",
             "ville", "city", "town", "locality", "province", "state", "etat", "pays", "country", "nation",
-            "region", "coordonnees", "coordinates", "gps", "latitude", "longitude", "coords", "location", "lieu", "geography", "localisation",
+            "region", "coordonnees", "coordinates", "gps", "latitude", "longitude", "coords", "location", "lieu", "geography", "localisation", "lat", "lon",
             "date_", "time_", "timestamp", "horodatage",
         ],
 
         # Sensitive data - Nature is sensitive (Finance, Health, Criminal, Opinion, Law 25)
-        # Note: Law 25 Article 110 defines sensitive information as:
-        # medical, financial, biometric, or otherwise intimate info (religion, orientation, etc.)
         "SENSITIVE": [
             # Financial
             "revenu", "income", "salary", "salaire", "wage", "earnings", "remuneration",
-            "solde", "balance", "montant", "amount", "valeur", "value",
+            "solde", "balance",
             "compte_bancaire", "bank_account", "numero_compte", "account_number",
             "credit_score", "creditscore", "scorecredit", "cote_credit", "rating",
             "debt", "dette", "emprunt", "loan", "hypotheque",
-            "expenses", "depenses", "medical_costs", "healthcare_expenses",
+            "expenses", "depenses", "medical_costs", "healthcare_expenses", "healthcare_coverage",
             # Health
             "medical", "health", "sante", "diagnostic", "maladie", "disease", "medical_condition",
             "condition", "pathology", "traitement", "treatment", "medicament", "medication", "drug",
@@ -143,7 +144,7 @@ class SensitiveDataDetector:
             "transaction_count", "nombre_produits", "num_products", "order_status", "statut_commande",
             "categorie_produit", "product_category", "transaction_date", "date_transaction",
             "is_active", "active_member", "membre_actif", "status", "statut", "type", "category", "categorie",
-            "item_id", "product_id"
+            "item_id", "product_id", "prefix", "suffix", "marital", "county", "birthplace", "prefixe", "suffixe"
         ],
 
         # Intrinsically Sensitive Domains (Always SENSITIVE)
@@ -160,24 +161,34 @@ class SensitiveDataDetector:
     # These 7 categories are explicitly defined as sensitive information by Law 25.
     # Order matters for priority within detection logic.
     LAW25_PRIORITY_CATEGORIES = {
-        "health": ["medical", "health", "sante", "patient", "diagnosis", "disease", "clinical", "traitement", "diagnostic", "cost", "expense", "record", "medic", "diagnost", "clinical", "sant"],
-        "genetic_or_biometric": ["biometrie", "biometric", "biométrie", "facial", "face_id", "faceid", "fingerprint", "empreinte", "iris", "reconnaissance", "adn", "dna", "genetique", "genetic", "face", "reconnaissanc"],
-        "financial": ["credit", "score", "salary", "income", "loan", "balance", "account", "payment", "debt", "salaire", "revenu", "solde", "compte", "finan", "salair", "dette"],
-        "sexual_life_or_orientation": ["sexual", "orientation", "vie_privee", "privacy", "intimacy", "sexuel", "orientat", "priv", "intima", "lgbt", "gay", "lesbien", "hetero", "bi"],
-        "religious_or_philosophical_beliefs": ["religion", "croyance", "belief", "faith", "philosophie", "philosophy", "relig", "philosoph", "conviction", "belief", "spiritual", "athe"],
-        "political_opinions": ["politique", "political", "opinion", "vote", "parti", "party", "affiliation", "polit", "affiliat", "militant", "syndicat"],
-        "ethnic_or_racial_origin": ["race", "ethnie", "ethnicity", "ethnic", "origine_ethnique", "ethnic_origin", "ancestry", "origine", "origin", "ethni", "ancestr", "racial"]
+        "BIOMETRIQUE": ["biometrie", "biometric", "biométrie", "facial", "face_id", "faceid", "fingerprint", "empreinte", "iris", "reconnaissance", "face", "reconnaissanc"],
+        "GENETIQUE": ["adn", "dna", "genetique", "genetic"],
+        "SANTE": ["medical", "health", "sante", "patient", "diagnosis", "disease", "clinical", "traitement", "diagnostic", "record", "medic", "diagnost", "clinical", "sant", "healthcare_expenses", "healthcare_coverage"],
+        "FINANCE": ["credit", "score", "salary", "income", "loan", "balance", "account", "payment", "debt", "salaire", "revenu", "solde", "compte", "finan", "salair", "dette"],
+        "VIE SEXUELLE": ["vie_privee", "privacy", "intimacy", "sexuel", "priv", "intima", "sexual_life"],
+        "ORIENTATION SEXUELLE": ["sexual", "orientation", "orientat", "lgbt", "gay", "lesbien", "hetero", "bi", "genre", "gender", "sexe", "sex"],
+        "RELIGION": ["religion", "croyance", "belief", "faith", "relig", "conviction", "belief", "spiritual", "athe"],
+        "PHILOSOPHIE": ["philosophie", "philosophy", "philosoph"],
+        "ORIGINE_RACIALE": ["race", "ethnicity", "ethnie", "racial", "ancestry", "origine", "origin", "ancestr", "ethnic", "origine_ethnique", "ethnic_origin"],
+        "ASSURANCE": ["assurance", "insurance", "policy", "police", "claim", "coverage", "premium", "prime"],
     }
 
-    # Display names for justifications (French labels as requested for Law 25 compliance)
+    # Display names for Law 25 categories
     LAW25_DISPLAY_NAMES = {
-        "financial": "financier",
-        "genetic_or_biometric": "génétique ou biométrique",
-        "health": "santé",
-        "sexual_life_or_orientation": "vie sexuelle ou orientation sexuelle",
-        "religious_or_philosophical_beliefs": "convictions religieuses ou philosophiques",
-        "political_opinions": "opinions politiques",
-        "ethnic_or_racial_origin": "origine ethnique ou raciale"
+        "BIOMETRIQUE": "Biométrique",
+        "GENETIQUE": "Génétique",
+        "SANTE": "Santé",
+        "FINANCE": "Financier",
+        "VIE SEXUELLE": "Vie sexuelle",
+        "ORIENTATION SEXUELLE": "Orientation sexuelle",
+        "RELIGION": "Religion",
+        "PHILOSOPHIE": "Philosophie",
+        "POLITIQUE": "Politique",
+        "ETHNIQUE": "Ethnique",
+        "RACIALE": "Raciale",
+        "ORIGINE_RACIALE": "Origine ethnique ou raciale",
+        "ASSURANCE": "Assurance",
+        "PERSONAL": "Personnel"
     }
 
     def __init__(self, db: Session):
@@ -202,13 +213,34 @@ class SensitiveDataDetector:
         classifications: Dict[str, ColumnClassification] = {}
 
         for column in dataset.columns:
-            col_data = df[column.name]
-            classification = self.detect_column_type(
-                column_name=column.name,
-                sample_values=col_data.dropna().head(50).tolist(),
-                unique_ratio=column.unique_count / dataset.row_count if dataset.row_count > 0 else 0,
-                data_type=column.data_type,
-            )
+            if column.name not in df.columns:
+                classification = ColumnClassification(
+                    column_name=column.name,
+                    sensitivity_type=DataType.NON_SENSITIVE,
+                    category=Category.OTHER,
+                    confidence=0.0,
+                    justification="Erreur : Colonne introuvable dans les données.",
+                    suggested_config=None,
+                )
+            else:
+                try:
+                    col_data = df[column.name]
+                    classification = self.detect_column_type(
+                        column_name=column.name,
+                        sample_values=col_data.dropna().head(50).tolist(),
+                        unique_ratio=column.unique_count / dataset.row_count if dataset.row_count > 0 else 0,
+                        data_type=column.data_type,
+                    )
+                except Exception as e:
+                    classification = ColumnClassification(
+                        column_name=column.name,
+                        sensitivity_type=DataType.NON_SENSITIVE,
+                        category=Category.OTHER,
+                        confidence=0.0,
+                        justification=f"Erreur d'analyse : {str(e)}",
+                        suggested_config=None,
+                    )
+
             classifications[column.name] = classification
 
             # Update column in database
@@ -264,23 +296,25 @@ class SensitiveDataDetector:
         normalized_name = normalize_text(column_name)
         
         # 0.1 DIRECT IDENTIFIER PRIORITY (HIGHEST)
-        # Check by name first
-        if self._is_direct_identifier_name(normalized_name):
+        # Check by name first, with content validation for short/ambiguous names
+        # print(f"DEBUG: Checking direct identifier for {normalized_name}")
+        if self._is_direct_identifier_name(normalized_name, sample_values):
              return ColumnClassification(
                 column_name=column_name,
                 sensitivity_type=DataType.DIRECT_IDENTIFIER,
                 category=Category.PERSONAL,
                 confidence=95.0,
-                justification=f"Identifiant direct : Reconnu par son nom de colonne '{column_name}'",
+                justification=f"Identifiant direct : Reconnu par son nom de colonne '{column_name}' et validé par le contenu",
                 suggested_config=self._get_suggested_config(
                     column_name, DataType.DIRECT_IDENTIFIER, Category.PERSONAL, data_type, None
                 ),
             )
 
-        # 0.2 LAW 25 PRIORITY RULE (ABSOLUTE PRIORITY FOR SENSITIVE DOMAINS)
+        # 0.2 LAW 25 PRIORITY RULE (ABSOLUTE PRIORITY FOR TRULY SENSITIVE DOMAINS)
         law25_match = self._check_law25_priority(normalized_name, sample_values)
         if law25_match:
             category, justification = law25_match
+            # For these priority domains, always force SENSITIVE
             return ColumnClassification(
                 column_name=column_name,
                 sensitivity_type=DataType.SENSITIVE,
@@ -305,7 +339,7 @@ class SensitiveDataDetector:
         pattern_type = None
 
         # --- LEVEL 1: SEMANTIC ANALYSIS (Weight: 40%) ---
-        name_check = self._check_column_name(normalized_name)
+        name_check = self._check_column_name(normalized_name, sample_values)
         if name_check:
             sensitivity, cat, score = name_check
             # Scale score to 40 max
@@ -477,7 +511,7 @@ class SensitiveDataDetector:
             params={"mode": "prefix", "prefix_length": 3}
         )
 
-    def _check_column_name(self, normalized_name: str) -> tuple[DataType, Category, float] | None:
+    def _check_column_name(self, normalized_name: str, sample_values: List[Any]) -> tuple[DataType, Category, float] | None:
         """Match normalized column name against dictionaries."""
         
         # Check explicit non-sensitive first to avoid false positives (e.g., product_name)
@@ -485,29 +519,39 @@ class SensitiveDataDetector:
             if keyword == normalized_name or f"_{keyword}" in normalized_name or f"{keyword}_" in normalized_name:
                 return (DataType.NON_SENSITIVE, Category.OTHER, 90.0)
 
-        # Check direct identifiers
-        for keyword in self.COLUMN_NAME_KEYWORDS["DIRECT"]:
-            if keyword == normalized_name or f"_{keyword}" in normalized_name or f"{keyword}_" in normalized_name:
-                # Exclude if it also contains non-sensitive contexts
-                if any(x in normalized_name for x in ["product", "item", "order", "company", "entreprise", "objet", "status", "statut"]):
-                    continue
-                return (DataType.DIRECT_IDENTIFIER, Category.PERSONAL, 85.0)
+        # Check direct identifiers using the content-aware logic
+        if self._is_direct_identifier_name(normalized_name, sample_values):
+            return (DataType.DIRECT_IDENTIFIER, Category.PERSONAL, 85.0)
 
         # Check sensitive
         for keyword in self.COLUMN_NAME_KEYWORDS["SENSITIVE"]:
             # Generalize matching: check if keyword is a significant part of the column name
             if keyword in normalized_name:
-                # Sub-categorization with Priority: HEALTH > FINANCIAL > INSURANCE > PERSONAL
+                # Sub-categorization with Priority
                 cat = Category.OTHER
-                if any(k in normalized_name for k in ["medical", "health", "sante", "patient", "diagnosis", "disease", "clinical"]):
-                    cat = Category.HEALTH
+                if any(k in normalized_name for k in ["medical", "health", "sante", "patient", "diagnosis", "disease", "clinical", "healthcare"]):
+                    cat = Category.SANTE
                 elif any(k in normalized_name for k in ["credit", "score", "salary", "income", "loan", "balance", "account", "payment", "debt"]):
-                    cat = Category.FINANCIAL
+                    cat = Category.FINANCE
                 elif any(k in normalized_name for k in ["assurance", "insurance", "policy", "police", "claim", "coverage", "premium", "prime"]):
-                    cat = Category.INSURANCE
-                elif any(k in normalized_name for k in ["biometric", "biometrie", "empreinte", "fingerprint", "dna", "adn", "genetic", "faceid", "iris"]):
-                    cat = Category.HEALTH
-                elif any(k in normalized_name for k in ["religion", "political", "politique", "sexual", "orientation", "gender", "genre", "sexe", "race", "ethni", "origin", "belief", "croyance"]):
+                    cat = Category.ASSURANCE
+                elif any(k in normalized_name for k in ["biometric", "biometrie", "empreinte", "fingerprint", "faceid", "iris"]):
+                    cat = Category.BIOMETRIQUE
+                elif any(k in normalized_name for k in ["dna", "adn", "genetic", "genetique"]):
+                    cat = Category.GENETIQUE
+                elif any(k in normalized_name for k in ["religion", "belief", "croyance"]):
+                    cat = Category.RELIGION
+                elif any(k in normalized_name for k in ["political", "politique", "vote", "parti", "party"]):
+                    cat = Category.POLITIQUE
+                elif any(k in normalized_name for k in ["sexual", "orientation"]):
+                    cat = Category.ORIENTATION_SEXUELLE
+                elif any(k in normalized_name for k in ["vie_privee", "privacy", "intimacy", "sexuel", "sexual_life"]):
+                    cat = Category.VIE_SEXUELLE
+                elif any(k in normalized_name for k in ["race", "ancestry", "ethnic", "ethnie", "racial", "origin"]):
+                    cat = Category.ETHNIC_OR_RACIAL_ORIGIN
+                elif any(k in normalized_name for k in ["philosophy", "philosophie", "philosoph"]):
+                    cat = Category.PHILOSOPHIE
+                elif any(k in normalized_name for k in self.COLUMN_NAME_KEYWORDS["DIRECT"] + self.COLUMN_NAME_KEYWORDS["QUASI"]):
                     cat = Category.PERSONAL
                 
                 return (DataType.SENSITIVE, cat, 85.0)
@@ -515,7 +559,7 @@ class SensitiveDataDetector:
         # Check quasi-identifiers
         for keyword in self.COLUMN_NAME_KEYWORDS["QUASI"]:
             if keyword == normalized_name or f"_{keyword}" in normalized_name or f"{keyword}_" in normalized_name:
-                return (DataType.QUASI_IDENTIFIER, Category.OTHER, 80.0)
+                return (DataType.QUASI_IDENTIFIER, Category.PERSONAL, 80.0)
 
         return None
 
@@ -606,39 +650,84 @@ class SensitiveDataDetector:
         # Check religious keywords
         religions = ["catholique", "protestant", "musulman", "juif", "bouddhiste", "hindou", "sikh", "athee"]
         if any(any(r in val for r in religions) for val in str_values):
-            display_name = self.LAW25_DISPLAY_NAMES["religious_or_philosophical_beliefs"]
-            return (Category.RELIGIOUS_OR_PHILOSOPHICAL_BELIEFS, f"Donnée sensible (Loi 25 - convictions religieuses) : {display_name}")
+            return (Category.RELIGION, "Donnée sensible (Loi 25 - convictions religieuses)")
     
         # Check sexual orientation keywords
         orientations = ["homosexuel", "heterosexuel", "bisexuel", "lesbienne", "gay", "transgenre"]
         if any(any(o in val for o in orientations) for val in str_values):
-            display_name = self.LAW25_DISPLAY_NAMES["sexual_life_or_orientation"]
-            return (Category.SEXUAL_LIFE_OR_ORIENTATION, f"Donnée sensible (Loi 25 - vie privée) : {display_name}")
+            return (Category.ORIENTATION_SEXUELLE, "Donnée sensible (Loi 25 - vie privée)")
 
         return None
 
     def _map_law25_to_category(self, cat_name: str) -> Category:
         """Map Law 25 category name to Category enum."""
-        mapping = {
-            "financial": Category.FINANCIAL,
-            "genetic_or_biometric": Category.GENETIC_OR_BIOMETRIC,
-            "health": Category.HEALTH,
-            "sexual_life_or_orientation": Category.SEXUAL_LIFE_OR_ORIENTATION,
-            "religious_or_philosophical_beliefs": Category.RELIGIOUS_OR_PHILOSOPHICAL_BELIEFS,
-            "political_opinions": Category.POLITICAL_OPINIONS,
-            "ethnic_or_racial_origin": Category.ETHNIC_OR_RACIAL_ORIGIN,
-            "insurance": Category.INSURANCE,
-            "personal": Category.PERSONAL
-        }
-        return mapping.get(cat_name, Category.OTHER)
+        try:
+            # First try direct mapping from Enum if cat_name is already a label
+            return Category(cat_name)
+        except ValueError:
+            # Fallback mapping for internal logic
+            mapping = {
+                "financial": Category.FINANCE,
+                "FINANCE": Category.FINANCE,
+                "genetic": Category.GENETIQUE,
+                "biometric": Category.BIOMETRIQUE,
+                "health": Category.SANTE,
+                "SANTE": Category.SANTE,
+                "sexual_life": Category.VIE_SEXUELLE,
+                "orientation": Category.ORIENTATION_SEXUELLE,
+                "religion": Category.RELIGION,
+                "philosophy": Category.PHILOSOPHIE,
+                "politics": Category.POLITIQUE,
+                "ethnic": Category.ETHNIC_OR_RACIAL_ORIGIN,
+                "racial": Category.ETHNIC_OR_RACIAL_ORIGIN,
+                "RACIALE": Category.ETHNIC_OR_RACIAL_ORIGIN,
+                "ORIGINE_RACIALE": Category.ETHNIC_OR_RACIAL_ORIGIN,
+                "ETHNIQUE": Category.ETHNIC_OR_RACIAL_ORIGIN,
+                "insurance": Category.ASSURANCE,
+                "personal": Category.PERSONAL,
+                "PERSONAL": Category.PERSONAL
+            }
+            return mapping.get(cat_name, Category.OTHER)
 
-    def _is_direct_identifier_name(self, normalized_name: str) -> bool:
-        """Check if normalized name belongs to Direct Identifiers."""
+    def _is_direct_identifier_name(self, normalized_name: str, sample_values: List[Any]) -> bool:
+        """Check if normalized name belongs to Direct Identifiers with content verification."""
         # Simple check against the DIRECT keywords list
         for keyword in self.COLUMN_NAME_KEYWORDS["DIRECT"]:
             if keyword == normalized_name or f"_{keyword}" in normalized_name or f"{keyword}_" in normalized_name:
                 # Exclude if it also contains non-sensitive contexts
                 if any(x in normalized_name for x in ["product", "item", "order", "company", "entreprise", "objet", "status", "statut"]):
                     continue
+                
+                # Content verification for short/generic names like "first", "last", "id"
+                if keyword in ["first", "last", "id"]:
+                    if not sample_values:
+                        return True # Default to sensitive if no samples
+                    
+                    # Convert samples to strings
+                    str_samples = [str(s).strip() for s in sample_values if s is not None]
+                    if not str_samples:
+                        return True
+                    
+                    # If it's a numeric column named "first" or "last", it's likely not a name
+                    if keyword in ["first", "last"]:
+                        # Check if samples look like names
+                        name_pattern = self.PATTERNS["NAME"]
+                        match_count = sum(1 for s in str_samples if re.match(name_pattern, s, re.IGNORECASE))
+                        # print(f"DEBUG: {normalized_name} match_count={match_count}/{len(str_samples)}")
+                        # If less than 20% match names but it's purely numeric/id-like/date-like, it's NOT a name
+                        if match_count / len(str_samples) < 0.2:
+                             # Check if purely numeric
+                             if all(re.match(r"^\d+$", s) for s in str_samples):
+                                 return False
+                             # Check if looks like a date
+                             if all(re.match(r"^\d{4}[-/]\d{2}[-/]\d{2}$", s) for s in str_samples):
+                                 return False
+                    
+                    if keyword == "id":
+                        # ID is only direct if it's broad or looks like a UUID/Complex hash
+                        # Simple integers are often not direct identifiers on their own
+                        if all(re.match(r"^\d+$", s) for s in str_samples):
+                            return False
+
                 return True
         return False

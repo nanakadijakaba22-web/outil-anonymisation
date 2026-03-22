@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # API Settings
-    API_V1_STR: str = "/api/v1"
+    URL_STR: str = "/api/v1"
     PROJECT_NAME: str = "Annoy - Data Anonymization Tool"
     VERSION: str = "0.1.0"
     DESCRIPTION: str = "Quebec Law 25 Compliant Data Anonymization API"

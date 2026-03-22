@@ -201,17 +201,18 @@ async def detect_sensitive_data(
         # Use AI-enhanced detector which falls back to rule-based if AI unavailable
         detector = AIEnhancedDetector(db)
         return await detector.analyze_dataset(dataset_id)
+    except HTTPException:
+        raise
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise
-        logger.error(f"Error during detection for dataset {dataset_id}: {str(e)}", exc_info=True)
+        # Log full stacktrace for debugging
+        logger.exception(f"CRITICAL: Detection failed for dataset {dataset_id}")
+        logger.error(f"Error type: {type(e).__name__}", exc_info=True)
+        
+        # Always return valid JSON with error detail
+        error_message = str(e) if str(e) else f"{type(e).__name__}: Unknown error"
         raise HTTPException(
             status_code=500,
-            detail={
-                "error": "Detection failed",
-                "message": str(e),
-                "dataset_id": str(dataset_id)
-            }
+            detail=f"Erreur critique pendant la détection: {error_message}"
         )
 
 

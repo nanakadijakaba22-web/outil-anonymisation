@@ -3,8 +3,7 @@
  * Type-safe client for all backend endpoints
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const API_V1 = `${API_BASE_URL}/api/v1`;
+const API_URL = `${process.env.NEXT_PUBLIC_API_URL || ""}${process.env.URL_STR || "/api/v1"}`;
 
 // Types
 export interface Dataset {
@@ -47,16 +46,21 @@ export interface ColumnClassification {
   | "sensitive"
   | "non_sensitive";
   category:
-  | "financial"
-  | "genetic_or_biometric"
-  | "health"
-  | "sexual_life_or_orientation"
-  | "religious_or_philosophical_beliefs"
-  | "political_opinions"
-  | "ethnic_or_racial_origin"
-  | "personal"
-  | "insurance"
-  | "other";
+  | "Personnel"
+  | "Origine ethnique ou raciale"
+  | "Santé"
+  | "Financier"
+  | "BIOMETRIQUE"
+  | "GENETIQUE"
+  | "VIE SEXUELLE"
+  | "ORIENTATION SEXUELLE"
+  | "RELIGION"
+  | "PHILOSOPHIE"
+  | "POLITIQUE"
+  | "ETHNIQUE"
+  | "RACIALE"
+  | "ASSURANCE"
+  | "Autre";
   confidence: number;
   justification: string;
   risk_score?: number; // Optionnel - Risque de ré-identification (0-100)
@@ -82,16 +86,21 @@ export interface ColumnSensitivityUpdate {
   | "sensitive"
   | "non_sensitive";
   category?:
-  | "financial"
-  | "genetic_or_biometric"
-  | "health"
-  | "sexual_life_or_orientation"
-  | "religious_or_philosophical_beliefs"
-  | "political_opinions"
-  | "ethnic_or_racial_origin"
-  | "personal"
-  | "insurance"
-  | "other";
+  | "Personnel"
+  | "Origine ethnique ou raciale"
+  | "Santé"
+  | "Financier"
+  | "BIOMETRIQUE"
+  | "GENETIQUE"
+  | "VIE SEXUELLE"
+  | "ORIENTATION SEXUELLE"
+  | "RELIGION"
+  | "PHILOSOPHIE"
+  | "POLITIQUE"
+  | "ETHNIQUE"
+  | "RACIALE"
+  | "ASSURANCE"
+  | "Autre";
   justification?: string;
 }
 
@@ -152,19 +161,32 @@ export interface RiskAssessment {
 class AnnoyAPIClient {
   private baseUrl: string;
 
-  constructor(baseUrl: string = API_V1) {
+  constructor(baseUrl: string = API_URL) {
     this.baseUrl = baseUrl;
   }
 
   // Helper method for handling responses
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
-      const error = await response
-        .json()
-        .catch(() => ({ detail: "Unknown error" }));
-      throw new Error(
-        error.detail || `HTTP ${response.status}: ${response.statusText}`,
-      );
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const text = await response.text();
+        if (text) {
+          const error = JSON.parse(text);
+          if (error.detail) {
+            // FastAPI sometimes returns detail as an array of validation errors or an object
+            if (typeof error.detail === 'string') {
+              errorMessage = error.detail;
+            } else if (typeof error.detail === 'object') {
+              errorMessage = error.detail.message || JSON.stringify(error.detail);
+            }
+          }
+        }
+      } catch (e) {
+        // Ignorer l'erreur de parsing et garder le message par défaut
+        console.error("Erreur de parsing dans handleResponse:", e);
+      }
+      throw new Error(errorMessage);
     }
     return response.json();
   }
@@ -213,6 +235,7 @@ class AnnoyAPIClient {
         method: "POST",
       },
     );
+    console.log("Response from detect endpoint:", response);
     return this.handleResponse<DetectionReport>(response);
   }
 

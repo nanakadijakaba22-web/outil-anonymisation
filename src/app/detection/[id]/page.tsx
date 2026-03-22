@@ -18,16 +18,21 @@ import Header from '@/components/Header';
 
 type SensitivityType = 'direct_identifier' | 'quasi_identifier' | 'sensitive' | 'non_sensitive';
 type Category =
-  | 'financial'
-  | 'genetic_or_biometric'
-  | 'health'
-  | 'sexual_life_or_orientation'
-  | 'religious_or_philosophical_beliefs'
-  | 'political_opinions'
-  | 'ethnic_or_racial_origin'
-  | 'personal'
-  | 'insurance'
-  | 'other';
+  | 'Personnel'
+  | 'Origine ethnique ou raciale'
+  | 'Santé'
+  | 'Financier'
+  | 'BIOMETRIQUE'
+  | 'GENETIQUE'
+  | 'VIE SEXUELLE'
+  | 'ORIENTATION SEXUELLE'
+  | 'RELIGION'
+  | 'PHILOSOPHIE'
+  | 'POLITIQUE'
+  | 'ETHNIQUE'
+  | 'RACIALE'
+  | 'ASSURANCE'
+  | 'Autre';
 
 interface EditableColumn extends ColumnClassification {
   isModified?: boolean;
@@ -59,6 +64,7 @@ export default function DetectionPage() {
 
         // Run detection
         const detectionReport = await api.detectSensitiveData(datasetId);
+        
         setReport(detectionReport);
         setEditedColumns(detectionReport.columns);
       } catch (err) {
@@ -405,16 +411,21 @@ export default function DetectionPage() {
                             onChange={(e) => handleCategoryChange(columnName, e.target.value as Category)}
                             className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
-                            <option value="financial">💰 Financier</option>
-                            <option value="genetic_or_biometric">🧬 Génétique ou biométrique</option>
-                            <option value="health">🏥 Santé</option>
-                            <option value="sexual_life_or_orientation">⚧️ Vie sexuelle / Orientation</option>
-                            <option value="religious_or_philosophical_beliefs">🛐 Convictions religieuses</option>
-                            <option value="political_opinions">⚖️ Opinions politiques</option>
-                            <option value="ethnic_or_racial_origin">🌍 Origine ethnique</option>
-                            <option value="personal">👤 Personnel</option>
-                            <option value="insurance">🛡️ Assurance</option>
-                            <option value="other">❓ Autre</option>
+                            <option value="Personnel">👤 Personnel</option>
+                            <option value="Origine ethnique ou raciale">🌍 Origine ethnique ou raciale</option>
+                            <option value="Santé">🏥 Santé</option>
+                            <option value="Financier">💰 Financier</option>
+                            <option value="BIOMETRIQUE">🧬 BIOMETRIQUE</option>
+                            <option value="GENETIQUE">🧪 GENETIQUE</option>
+                            <option value="VIE SEXUELLE">⚧️ VIE SEXUELLE</option>
+                            <option value="ORIENTATION SEXUELLE">🌈 ORIENTATION SEXUELLE</option>
+                            <option value="RELIGION">🛐 RELIGION</option>
+                            <option value="PHILOSOPHIE">🧘 PHILOSOPHIE</option>
+                            <option value="POLITIQUE">⚖️ POLITIQUE</option>
+                            <option value="ETHNIQUE">👨‍👩‍👧‍👦 ETHNIQUE</option>
+                            <option value="RACIALE">🧬 RACIALE</option>
+                            <option value="ASSURANCE">🛡️ ASSURANCE</option>
+                            <option value="Autre">❓ Autre</option>
                           </select>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -471,8 +482,8 @@ export default function DetectionPage() {
               onClick={handleReset}
               disabled={!hasChanges || isAutoAnonymizing}
               className={`py-3 px-8 rounded-lg font-semibold transition-all ${hasChanges && !isAutoAnonymizing
-                  ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-2 border-yellow-300'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-2 border-yellow-300'
+                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 }`}
             >
               Réinitialiser

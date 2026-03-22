@@ -154,7 +154,7 @@ Crée un service de détection automatique des identifiants avec :
 1. Détection des identifiants DIRECTS : NAS, email, téléphone, nom, prénom, adresse
 2. Détection des quasi-identifiants : date naissance, code postal, genre, âge
 3. Classification automatique par catégorie (Loi 25) :
-   - Renseignement personnel
+   - Personnel
    - Finance
    - Santé
    - Assurance

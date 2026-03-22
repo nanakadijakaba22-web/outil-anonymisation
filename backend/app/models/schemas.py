@@ -67,19 +67,27 @@ class DataType(str, Enum):
 
 class Category(str, Enum):
     """
-    Data categories per Quebec's Law 25.
-    These 7 categories are explicitly defined as sensitive information.
+    Standardized data categories for Law 25 compliance as requested by the user.
     """
-    PERSONAL = "personal"
-    FINANCIAL = "financial"
-    GENETIC_OR_BIOMETRIC = "genetic_or_biometric"
-    HEALTH = "health"
-    SEXUAL_LIFE_OR_ORIENTATION = "sexual_life_or_orientation"
-    RELIGIOUS_OR_PHILOSOPHICAL_BELIEFS = "religious_or_philosophical_beliefs"
-    POLITICAL_OPINIONS = "political_opinions"
-    ETHNIC_OR_RACIAL_ORIGIN = "ethnic_or_racial_origin"
-    INSURANCE = "insurance"
-    OTHER = "other"
+    PERSONAL = "Personnel"
+    ETHNIC_OR_RACIAL_ORIGIN = "Origine ethnique ou raciale"
+    SANTE = "Santé"
+    FINANCE = "Financier"
+    BIOMETRIQUE = "BIOMETRIQUE"
+    GENETIQUE = "GENETIQUE"
+    VIE_SEXUELLE = "VIE SEXUELLE"
+    ORIENTATION_SEXUELLE = "ORIENTATION SEXUELLE"
+    RELIGION = "RELIGION"
+    PHILOSOPHIE = "PHILOSOPHIE"
+    POLITIQUE = "POLITIQUE"
+    ETHNIQUE = "ETHNIQUE"
+    RACIALE = "RACIALE"
+    ASSURANCE = "ASSURANCE"
+    OTHER = "Autre"
+    
+    # Legacy/Internal aliases for backward compatibility if needed
+    HEALTH = "Santé"
+    FINANCIAL = "Financier"
 
 
 class RiskLevel(str, Enum):

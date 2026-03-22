@@ -38,25 +38,47 @@ class AIEnhancedDetector(SensitiveDataDetector):
 
 Ton rôle est de classifier des colonnes de données avec une précision absolue. La Loi 25 exige une protection rigoureuse.
 
-**Catégories de sensibilité (sensitivity_type)**:
+**Types de sensibilité (sensitivity_type)**:
 1. "direct_identifier": Information qui permet d'identifier directement et de manière unique une personne.
-   - Exemples: NAS, RAMQ, Nom complet, Email, Téléphone, No Passeport, No Permis, ID Client unique, Username.
+   - Exemples: SSN, PASSPORT, DRIVERS, FIRST, LAST, MAIDEN, NAS, RAMQ, Email, Téléphone.
 2. "quasi_identifier": Information qui, seule, ne permet pas d'identifier, mais qui combinée à d'autres peut ré-identifier.
-   - Exemples: Date de naissance, Code postal, Genre, Ville, Coordonnées GPS, Age.
-3. "sensitive": Données dont la nature exige une haute protection (financier, médical, assurance, origine).
-   - Exemples: Revenu, Solde bancaire, Diagnostic médical, No de police d'assurance, Ethnie, Race, Religion, Orientation sexuelle.
+   - Exemples: BIRTHDATE, ADDRESS, CITY, STATE, ZIP, LAT, LON, Date de naissance, Code postal, Ville, Coordonnées GPS.
+3. "sensitive": Données dont la nature exige une haute protection (Santé, Origine ethnique ou raciale, Financier, Assurance).
+   - Exemples: GENDER, RACE, ETHNICITY, HEALTHCARE_EXPENSES, Revenu, Solde bancaire, Diagnostic médical, Genre.
 4. "non_sensitive": Données d'affaires générales ou publiques.
+   - Exemples: PREFIX, SUFFIX, MARITAL, COUNTY, BIRTHPLACE.
+
+**Catégories (category)** - UTILISE EXACTEMENT CES VALEURS:
+- "Personnel"
+- "Origine ethnique ou raciale"
+- "Santé"
+- "Financier"
+- "VIE SEXUELLE"
+- "ORIENTATION SEXUELLE"
+- "RELIGION"
+- "PHILOSOPHIE"
+- "POLITIQUE"
+- "ETHNIQUE"
+- "RACIALE"
+- "BIOMETRIQUE"
+- "GENETIQUE"
+- "ASSURANCE"
+- "Autre"
 
 **Instructions de classification**:
 - Sois CONSERVATEUR : Si tu as un doute entre deux catégories, choisis TOUJOURS la plus sensible.
-- Analyse le nom technique de la colonne ET les échantillons de valeurs.
-- Ignore les valeurs nulles ou vides dans ton analyse.
+- SSN, BIRTHDATE, ADDRESS -> "Personnel"
+- "first" ou "last" sont des noms (Personnel), mais SEULEMENT si le contenu ressemble à des noms. Si le contenu est numérique (ex: index, quantité) ou est une date, classe selon le contenu.
+- GENDER, SEXE, ORIENTATION -> "ORIENTATION SEXUELLE"
+- RACE, ETHNICITY -> "Origine ethnique ou raciale"
+- HEALTHCARE_EXPENSES, HEALTHCARE_COVERAGE -> "Santé"
+- PREFIX, SUFFIX, MARITAL, COUNTY, BIRTHPLACE -> "Autre" (Type: non_sensitive)
 - La justification doit être courte, en français, et expliquer POURQUOI cette classification a été choisie selon la Loi 25.
 
 Réponds UNIQUEMENT avec un objet JSON valide suivant cette structure:
 {
   "sensitivity_type": "direct_identifier|quasi_identifier|sensitive|non_sensitive",
-  "category": "personal|financial|health|insurance|other",
+  "category": "Personnel|Origine ethnique ou raciale|Santé|Financier|ORIENTATION SEXUELLE|BIOMETRIQUE|GENETIQUE|VIE SEXUELLE|RELIGION|PHILOSOPHIE|POLITIQUE|ETHNIQUE|RACIALE|ASSURANCE|Autre",
   "confidence": 0-100,
   "justification": "..."
 }"""
@@ -129,28 +151,33 @@ Réponds UNIQUEMENT avec un objet JSON valide suivant cette structure:
         # Si OLLAMA_ANALYZE_ALL_COLUMNS est True, analyser TOUTES les colonnes
         # Sinon, seulement les colonnes à faible confiance
         for column_name, cls in report.columns.items():
-            # Use attribute access directly
             should_analyze = (
                 settings.OLLAMA_ANALYZE_ALL_COLUMNS or
                 cls.confidence < settings.AI_CONFIDENCE_THRESHOLD
             )
             if should_analyze:
+                if column_name not in df.columns:
+                    logger.warning(f"Colonne requise manquante pour IA: '{column_name}'")
+                    continue
+                    
                 logger.info(
                     f"Low confidence ({cls.confidence}%) for '{column_name}', "
                     f"using AI enhancement"
                 )
 
-                # Get sample values for this column (increased to 20 for better AI analysis)
-                col_data = df[column_name]
-                sample_values = col_data.dropna().head(20).tolist()
+                try:
+                    col_data = df[column_name]
+                    sample_values = col_data.dropna().head(20).tolist()
 
-                # Get AI classification
-                ai_classification = await self._classify_with_ai(
-                    column_name=column_name,
-                    sample_values=sample_values,
-                    data_type=cls.category.value,
-                    rule_based_result=cls,
-                )
+                    ai_classification = await self._classify_with_ai(
+                        column_name=column_name,
+                        sample_values=sample_values,
+                        data_type=cls.category.value if hasattr(cls.category, "value") else str(cls.category),
+                        rule_based_result=cls,
+                    )
+                except Exception as e:
+                    logger.exception(f"Erreur d'analyse IA pour la colonne '{column_name}': {e}")
+                    ai_classification = None
 
                 if ai_classification:
                     # Combine rule-based and AI results
@@ -220,7 +247,7 @@ Réponds UNIQUEMENT avec un objet JSON valide suivant cette structure:
 Fournis ta classification en JSON avec cette structure exacte:
 {{
   "sensitivity_type": "direct_identifier|quasi_identifier|sensitive|non_sensitive",
-  "category": "personal|financial|health|insurance|other",
+  "category": "Personnel|Origine ethnique ou raciale|Santé|Financier|VIE SEXUELLE|ORIENTATION SEXUELLE|RELIGION|PHILOSOPHIE|POLITIQUE|ETHNIQUE|RACIALE|BIOMETRIQUE|GENETIQUE|ASSURANCE|Autre",
   "confidence": 0-100,
   "justification": "Explication courte en français"
 }}"""
@@ -243,23 +270,43 @@ Fournis ta classification en JSON avec cette structure exacte:
             # Parse JSON response
             ai_result = json.loads(response['message']['content'])
 
+            # Validate sensitivity_type
+            try:
+                sensitivity_type = DataType(ai_result["sensitivity_type"])
+            except (KeyError, ValueError) as e:
+                logger.error(f"Invalid sensitivity_type '{ai_result.get('sensitivity_type')}' from AI for column '{column_name}': {e}")
+                return None
+
+            # Validate category - convert to proper enum value
+            try:
+                category = Category(ai_result["category"])
+            except (KeyError, ValueError) as e:
+                logger.error(f"Invalid category '{ai_result.get('category')}' from AI for column '{column_name}': {e}")
+                return None
+
             # Validate and convert to ColumnClassification
+            try:
+                confidence = float(ai_result["confidence"])
+                if not (0 <= confidence <= 100):
+                    confidence = 50
+            except (KeyError, ValueError):
+                confidence = 50
+
+            justification = ai_result.get("justification", "Classification par IA")
+
             return ColumnClassification(
                 column_name=column_name,
-                sensitivity_type=DataType(ai_result["sensitivity_type"]),
-                category=Category(ai_result["category"]),
-                confidence=float(ai_result["confidence"]),
-                justification=f"[IA] {ai_result['justification']}",
+                sensitivity_type=sensitivity_type,
+                category=category,
+                confidence=confidence,
+                justification=f"[IA] {justification}",
             )
 
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse AI response JSON: {e}")
-            return None
-        except KeyError as e:
-            logger.error(f"Missing key in AI response: {e}")
+            logger.error(f"Failed to parse AI response JSON for column '{column_name}': {e}")
             return None
         except Exception as e:
-            logger.error(f"AI classification failed: {e}")
+            logger.error(f"AI classification failed for column '{column_name}': {e}", exc_info=True)
             return None
 
     def _combine_classifications(

@@ -270,8 +270,18 @@ class DataIngestionService:
     def load_dataframe(self, dataset_id: uuid.UUID) -> pd.DataFrame:
         """Load full dataset as pandas DataFrame using preserved metadata."""
         dataset = self.get_dataset(dataset_id)
-        return pd.read_csv(
-            dataset.file_path,
-            encoding=dataset.encoding or 'utf-8',
-            sep=dataset.delimiter or ','
-        )
+        
+        file_path = Path(dataset.file_path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"Le fichier CSV est introuvable sur le disque : {dataset.file_path}")
+            
+        try:
+            return pd.read_csv(
+                dataset.file_path,
+                encoding=dataset.encoding or 'utf-8',
+                sep=dataset.delimiter or ','
+            )
+        except pd.errors.EmptyDataError:
+            raise ValueError("Le fichier CSV est vide.")
+        except Exception as e:
+            raise ValueError(f"Erreur de lecture pandas: {str(e)}")

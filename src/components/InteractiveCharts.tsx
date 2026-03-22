@@ -77,7 +77,7 @@ export default function InteractiveCharts({ datasetId }: InteractiveChartsProps)
       try {
         setLoading(true);
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/datasets/${datasetId}/statistics`
+          `${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/datasets/${datasetId}/statistics`
         );
 
         if (!response.ok) {
@@ -119,9 +119,9 @@ export default function InteractiveCharts({ datasetId }: InteractiveChartsProps)
   const firstNumericDist = numericDistributions.length > 0 ? numericDistributions[0] : null;
   const histogramData = firstNumericDist?.[1]?.histogram
     ? firstNumericDist[1].histogram.counts.map((count, idx) => ({
-        bin: `${firstNumericDist[1].histogram!.bin_edges[idx].toFixed(1)}`,
-        count,
-      }))
+      bin: `${firstNumericDist[1].histogram!.bin_edges[idx].toFixed(1)}`,
+      count,
+    }))
     : [];
 
   // Prepare categorical frequency data
@@ -145,13 +145,13 @@ export default function InteractiveCharts({ datasetId }: InteractiveChartsProps)
   // Prepare outlier data
   const outlierData = data.outliers
     ? Object.entries(data.outliers)
-        .filter(([_, o]) => o.count > 0)
-        .map(([col, o]) => ({
-          column: col,
-          count: o.count,
-          percentage: o.percentage,
-        }))
-        .slice(0, 10)
+      .filter(([_, o]) => o.count > 0)
+      .map(([col, o]) => ({
+        column: col,
+        count: o.count,
+        percentage: o.percentage,
+      }))
+      .slice(0, 10)
     : [];
 
   return (
@@ -164,31 +164,28 @@ export default function InteractiveCharts({ datasetId }: InteractiveChartsProps)
       <div className="flex gap-2 mb-6 border-b border-gray-200">
         <button
           onClick={() => setActiveTab('distributions')}
-          className={`px-6 py-3 font-medium transition-all border-b-2 ${
-            activeTab === 'distributions'
+          className={`px-6 py-3 font-medium transition-all border-b-2 ${activeTab === 'distributions'
               ? 'text-blue-600 border-blue-600'
               : 'text-gray-600 border-transparent hover:text-blue-500'
-          }`}
+            }`}
         >
           Distributions
         </button>
         <button
           onClick={() => setActiveTab('correlations')}
-          className={`px-6 py-3 font-medium transition-all border-b-2 ${
-            activeTab === 'correlations'
+          className={`px-6 py-3 font-medium transition-all border-b-2 ${activeTab === 'correlations'
               ? 'text-blue-600 border-blue-600'
               : 'text-gray-600 border-transparent hover:text-blue-500'
-          }`}
+            }`}
         >
           Corrélations
         </button>
         <button
           onClick={() => setActiveTab('outliers')}
-          className={`px-6 py-3 font-medium transition-all border-b-2 ${
-            activeTab === 'outliers'
+          className={`px-6 py-3 font-medium transition-all border-b-2 ${activeTab === 'outliers'
               ? 'text-blue-600 border-blue-600'
               : 'text-gray-600 border-transparent hover:text-blue-500'
-          }`}
+            }`}
         >
           Valeurs Aberrantes
         </button>
@@ -326,11 +323,10 @@ export default function InteractiveCharts({ datasetId }: InteractiveChartsProps)
                           <td className="px-6 py-4 text-sm text-gray-900">{corr.column2}</td>
                           <td className="px-6 py-4 text-sm">
                             <span
-                              className={`px-3 py-1 rounded-full font-medium ${
-                                corr.correlation > 0
+                              className={`px-3 py-1 rounded-full font-medium ${corr.correlation > 0
                                   ? 'bg-green-100 text-green-800'
                                   : 'bg-red-100 text-red-800'
-                              }`}
+                                }`}
                             >
                               {corr.correlation.toFixed(3)}
                             </span>

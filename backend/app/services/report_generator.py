@@ -35,6 +35,7 @@ from app.models.schemas import (
     DetectionReport,
     RiskAssessmentResponse,
     AnonymizationResponse,
+    Category,
 )
 
 
@@ -539,19 +540,12 @@ class PDFReportGenerator:
         if not category:
             return ""
             
-        mapping = {
-            "financial": "financier",
-            "genetic_or_biometric": "génétique ou biométrique",
-            "health": "santé",
-            "sexual_life_or_orientation": "vie sexuelle ou orientation sexuelle",
-            "religious_or_philosophical_beliefs": "convictions religieuses ou philosophiques",
-            "political_opinions": "opinions politiques",
-            "ethnic_or_racial_origin": "origine ethnique ou raciale",
-            "personal": "personnel",
-            "insurance": "assurance",
-            "other": "autre"
-        }
-        return mapping.get(category, category)
+        # The categories are now standardized labels (BIOMETRIQUE, FINANCE, etc.)
+        # We can return them directly or ensure they exist in the Enum.
+        try:
+            return Category(category).value
+        except ValueError:
+            return category
 
     def _format_technique(self, technique: str) -> str:
         """Format anonymization technique for display."""

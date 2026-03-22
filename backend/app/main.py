@@ -16,7 +16,7 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description=settings.DESCRIPTION,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    openapi_url=f"{settings.URL_STR}/openapi.json",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -108,4 +108,4 @@ async def root():
 
 # Include API routers
 from app.api.v1.router import api_router
-app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(api_router, prefix=settings.URL_STR)

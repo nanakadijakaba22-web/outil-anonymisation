@@ -100,24 +100,41 @@ export function formatSensitivityType(type: string | null): string {
 // Format category to French according to Law 25
 export function formatCategory(category: string | null): string {
   switch (category) {
-    case 'financial':
-      return 'Financier';
-    case 'genetic_or_biometric':
-      return 'Génétique ou biométrique';
-    case 'health':
-      return 'Santé';
-    case 'sexual_life_or_orientation':
-      return 'Vie sexuelle ou orientation sexuelle';
-    case 'religious_or_philosophical_beliefs':
-      return 'Convictions religieuses ou philosophiques';
-    case 'political_opinions':
-      return 'Opinions politiques';
-    case 'ethnic_or_racial_origin':
-      return 'Origine ethnique ou raciale';
+    case 'Personnel':
     case 'personal':
       return 'Personnel';
-    case 'insurance':
+    case 'Origine ethnique ou raciale':
+    case 'ethnic_or_racial_origin':
+    case 'ethnic':
+    case 'racial':
+      return 'Origine ethnique ou raciale';
+    case 'Santé':
+    case 'health':
+      return 'Santé';
+    case 'Financier':
+    case 'financial':
+      return 'Financier';
+    case 'BIOMETRIQUE':
+      return 'Biométrique';
+    case 'GENETIQUE':
+      return 'Génétique';
+    case 'VIE SEXUELLE':
+      return 'Vie sexuelle';
+    case 'ORIENTATION SEXUELLE':
+      return 'Orientation sexuelle';
+    case 'RELIGION':
+      return 'Religion';
+    case 'PHILOSOPHIE':
+      return 'Philosophie';
+    case 'POLITIQUE':
+      return 'Politique';
+    case 'ETHNIQUE':
+      return 'Ethnique';
+    case 'RACIALE':
+      return 'Raciale';
+    case 'ASSURANCE':
       return 'Assurance';
+    case 'Autre':
     case 'other':
     default:
       return 'Autre';

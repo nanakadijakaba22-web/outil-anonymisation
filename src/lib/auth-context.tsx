@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(storedToken);
         try {
           // Fetch current user info
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/me`, {
+          const response = await fetch('/api/v1/auth/me', {
             headers: {
               'Authorization': `Bearer ${storedToken}`,
             },
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       formData.append('username', email);
       formData.append('password', password);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/login`, {
+      const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -80,8 +80,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Login failed');
+        let errorMessage = 'Login failed';
+        const text = await response.text();
+        try {
+          if (text) {
+            const error = JSON.parse(text);
+            errorMessage = error.detail || errorMessage;
+          }
+        } catch (e) {
+          // Fallback if response is not JSON (e.g., HTML from 502/500 proxy error)
+          if (text) errorMessage = `${errorMessage}: ${text}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -92,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(accessToken);
 
       // Fetch user info
-      const userResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/me`, {
+      const userResponse = await fetch('/api/v1/auth/me', {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
         },
@@ -110,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (email: string, password: string, fullName?: string) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/register`, {
+      const response = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -123,8 +133,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Registration failed');
+        let errorMessage = 'Registration failed';
+        const text = await response.text();
+        try {
+          if (text) {
+            const error = JSON.parse(text);
+            errorMessage = error.detail || errorMessage;
+          }
+        } catch (e) {
+          // Fallback if response is not JSON
+          if (text) errorMessage = `${errorMessage}: ${text}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const userData = await response.json();
