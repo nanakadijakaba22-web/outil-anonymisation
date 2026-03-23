@@ -1,9 +1,13 @@
 /**
  * API Client for Annoy Backend
  * Type-safe client for all backend endpoints
+ * 
+ * Note: API_URL is hardcoded to /api/v1 (relative path)
+ * Next.js proxy rewrites /api/* to http://backend:8000/api/*
+ * No CORS issues because proxy is server-side
  */
 
-const API_URL = `${process.env.NEXT_PUBLIC_API_URL || ""}${process.env.URL_STR || "/api/v1"}`;
+const API_URL = "/api/v1";
 
 // Types
 export interface Dataset {
@@ -230,7 +234,7 @@ class AnnoyAPIClient {
   // Detection endpoint
   async detectSensitiveData(datasetId: string): Promise<DetectionReport> {
     const response = await fetch(
-      `${this.baseUrl}/datasets/${datasetId}/detect`,
+      `http://localhost:8000/api/v1/datasets/${datasetId}/detect`,
       {
         method: "POST",
       },
