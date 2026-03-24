@@ -21,7 +21,6 @@ class Settings(BaseSettings):
 
     # CORS Settings
     BACKEND_CORS_ORIGINS: list[str] = [
-    "http://backend:8000",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:5173",
@@ -54,7 +53,9 @@ class Settings(BaseSettings):
         return v
 
     # Database Settings
-    POSTGRES_SERVER: str = "localhost"
+    # Default to the Docker service name 'db' so the app works inside Docker Compose.
+    # When running outside Docker, override via environment variables or set DATABASE_URL.
+    POSTGRES_SERVER: str = "db"
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
     POSTGRES_DB: str = "annoy_db"

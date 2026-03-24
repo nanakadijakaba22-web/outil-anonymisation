@@ -18,14 +18,14 @@ const nextConfig: NextConfig = {
   },
 
   // Proxy API requests to backend
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://backend:8000/api/:path*',
-      },
-    ];
-  },
+ //  async rewrites() {
+ //    return [
+  //     {
+  //       source: '/api/:path*',
+  //       destination: 'http://backend:8000/api/:path*',
+  //     },
+  //   ];
+  // },
 
   // Logging configuration
   logging: {

@@ -2,7 +2,7 @@ services:
   # PostgreSQL Database
   db:
     image: postgres:15-alpine
-    container_name: annoy_db
+    container_name: db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -24,7 +24,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: annoy_backend
+    container_name: backend
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --timeout-keep-alive 60"
@@ -34,12 +34,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - POSTGRES_SERVER=db
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-annoy_db}
-      - POSTGRES_PORT=5432
-      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
       - PYTHONPATH=/app
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
@@ -63,16 +57,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: annoy_frontend
-    command: npm run dev
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
+    container_name: frontend
+    # Run production server using the built image (do not mount source)
+    command: npm run start
+    # In production we don't mount the source tree to avoid overwriting the built .next
+    # Remove volume mounts that overwrite /app files from the image
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://backend:8000}
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
     depends_on:
       backend:
         condition: service_healthy

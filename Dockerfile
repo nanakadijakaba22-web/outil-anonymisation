@@ -1,27 +1,44 @@
-# Next.js Frontend Development Dockerfile
-FROM node:20-alpine
+# Production-ready Next.js frontend Dockerfile
+FROM node:20-alpine AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Install dependencies (only copy package files first for caching)
+# Install build deps (copy lock files first to leverage cache)
 COPY package.json package-lock.json* pnpm-lock.yaml* ./
-RUN \
-  if [ -f package-lock.json ]; then npm install; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm install; \
-  else npm install; \
+RUN set -eux; \
+  if [ -f package-lock.json ]; then npm ci --silent; \
+  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm install --silent; \
+  else npm ci --silent; \
   fi
 
-# Note: In development, we mount the source code as a volume
-# but we copy it here just in case or for non-compose usage
+# Copy source and build
 COPY . .
+# Force Next.js to use webpack during build to avoid Turbopack/webpack conflict
+RUN npm run build -- --webpack
 
-# Expose Next.js port
+########### Runtime image ###########
+FROM node:20-alpine AS runtime
+WORKDIR /app
+
+# Install only production dependencies (if package-lock.json present)
+COPY package.json package-lock.json* pnpm-lock.yaml* ./
+RUN set -eux; \
+  if [ -f package-lock.json ]; then npm ci --only=production --silent; \
+  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm install --prod --silent; \
+  else npm ci --only=production --silent; \
+  fi
+
+# Copy built output from builder
+COPY --from=builder /app/.next .next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+
+# Expose port and set env
 EXPOSE 3000
-
-# Set environment variables
+ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=development
 
-# Run development server
-CMD ["npm", "run", "dev"]
+# Start the Next.js server
+CMD ["npm", "run", "start"]
