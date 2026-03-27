@@ -88,8 +88,63 @@ Recommandations:
 
 ## 🚀 Installation Rapide
 
-### Prérequis
-- Docker & Docker Compose
+### Prérequis (macOS)
+
+- Docker Desktop (inclut Docker Compose)
+- Git
+- OpenSSL (pour générer des secrets)
+- Python 3.11+ et Poetry (backend)
+- Node.js (LTS) et pnpm (frontend)
+- PostgreSQL 15 (peut être exécuté en conteneur)
+- Ollama (pour exécuter des modèles LLM locaux) — modèle recommandé par défaut: `llama3.1:8b` (configurable via `OLLAMA_MODEL` dans `.env` ou `docker-compose.yml`)
+- Ressources recommandées : 16 GB RAM et espace disque suffisant pour les modèles
+
+### Installation rapide (macOS) — commandes copy/paste
+
+```bash
+# Installer Homebrew (si nécessaire)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew update
+
+# 1) Docker Desktop
+brew install --cask docker
+# Ouvrir Docker.app et attendre qu'il démarte
+
+# 2) Git et OpenSSL
+brew install git openssl
+
+# 3) Python 3.11 et Poetry
+brew install python@3.11
+curl -sSL https://install.python-poetry.org | python3 -
+
+# 4) Node.js (LTS) et pnpm via Corepack
+brew install node
+corepack enable
+corepack prepare pnpm@latest --activate
+
+# 5) PostgreSQL (local, optionnel si vous utilisez Docker)
+brew install postgresql@15
+brew services start postgresql@15
+
+# 6) Ollama (installer et vérifier)
+brew install ollama || true
+ollama --version
+
+# 7) Télécharger le modèle (exemple)
+# Le nom du modèle est configurable — le projet utilise par défaut `llama3.1:8b`.
+ollama pull llama3.1:8b
+
+# 8) Installer dépendances du backend et frontend
+cd backend
+poetry install
+cd ..
+pnpm install
+```
+
+Remarques:
+- Le nom exact du modèle Ollama peut varier (vérifiez la doc Ollama). Les modèles locaux sont volumineux.
+- Sur Apple Silicon, Ollama peut utiliser l'accélération MPS — vérifiez la documentation du modèle.
+- Vous pouvez exécuter PostgreSQL et le backend via `docker-compose up -d` pour éviter des installations locales.
 
 ### Démarrage
 
@@ -113,7 +168,7 @@ open http://localhost:8000/docs
 
 **Services démarrés:**
 - 🔹 Backend API: http://localhost:8000
-- 🔹 Frontend: http://localhost:3000 (à venir)
+- 🔹 Frontend: http://localhost:3000
 - 🔹 PostgreSQL: localhost:5432
 
 ---
@@ -505,5 +560,5 @@ Proprietary - Tous droits réservés
 
 ---
 
-**Version:** 0.1.0-beta
-**Dernière mise à jour:** 2025-12-31
+**Version:** 0.1.0
+**Dernière mise à jour:** 2026-03-27

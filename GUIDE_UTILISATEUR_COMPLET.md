@@ -871,7 +871,7 @@ curl http://localhost:8000/health
 ollama list
 
 # Mettre à jour Ollama
-ollama pull gemma3:4b
+ollama pull llama3.1:8b
 ```
 
 ### Problèmes courants

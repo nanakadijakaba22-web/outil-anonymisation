@@ -138,10 +138,10 @@ docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 --name ollama ol
 
 ## Installation du modèle
 
-### Gemma 3 4B (Recommandé)
+### Llama 3.1 8B (Recommandé)
 
 ```bash
-# Télécharger le modèle
+# Télécharger le modèle recommandé
 ollama pull llama3.1:8b
 ```
 
